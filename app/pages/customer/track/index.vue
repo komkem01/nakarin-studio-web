@@ -104,13 +104,15 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
-import { findTrackingRecord } from '~/data/customer-tracking'
+import { useAdminMvpStore } from '~/composables/useAdminMvpStore'
+import { findTrackingRecord, normalizePhone } from '~/data/customer-tracking'
 import type { TrackingRecord } from '~/data/customer-tracking'
 
 const route = useRoute()
 const ATTEMPT_WINDOW_MS = 60 * 1000
 const MAX_ATTEMPTS_PER_WINDOW = 5
 const STORAGE_KEY = 'customer-track-attempts'
+const { bookings, orders, bookingHistory, orderHistory } = useAdminMvpStore()
 
 const searchForm = reactive({
     referenceNo: '',
@@ -184,6 +186,59 @@ const refreshRateLimitState = () => {
     }
 }
 
+const buildLiveRecord = (referenceNo: string, phone: string): TrackingRecord | null => {
+    const normalizedRef = referenceNo.trim().toUpperCase()
+    const normalizedPhone = normalizePhone(phone)
+
+    const order = orders.value.find(
+        (item) => item.referenceNo.toUpperCase() === normalizedRef && normalizePhone(item.phone) === normalizedPhone
+    )
+
+    if (order) {
+        const orderSteps = (orderHistory.value[order.id] || []).map((step) => ({
+            title: step.note,
+            at: step.at,
+            done: true
+        }))
+
+        return {
+            referenceNo: order.referenceNo,
+            phone: order.phone,
+            customerName: order.customerName,
+            type: 'product',
+            itemName: order.itemName,
+            statusLabel: order.status,
+            appointmentDate: order.dueDate,
+            note: 'รายการนี้ได้รับการยืนยันเป็นคำสั่งซื้อแล้ว',
+            timeline: orderSteps.length ? orderSteps : [{ title: 'สร้างคำสั่งซื้อในระบบ', at: '-', done: true }]
+        }
+    }
+
+    const booking = bookings.value.find(
+        (item) => item.referenceNo.toUpperCase() === normalizedRef && normalizePhone(item.phone) === normalizedPhone
+    )
+
+    if (!booking) return null
+
+    const bookingSteps = (bookingHistory.value[booking.id] || []).map((step) => ({
+        title: step.note,
+        at: step.at,
+        done: true
+    }))
+
+    return {
+        referenceNo: booking.referenceNo,
+        phone: booking.phone,
+        customerName: booking.customerName,
+        type: 'booking',
+        itemName: booking.packageName,
+        statusLabel: booking.status,
+        appointmentDate: booking.eventDate,
+        note: 'รายการนี้อยู่ในขั้นตอนการจอง รอทีมงานยืนยันเพิ่มเติม',
+        timeline: bookingSteps.length ? bookingSteps : [{ title: 'รับคำขอจองเรียบร้อย', at: '-', done: true }]
+    }
+}
+
 const handleSearch = () => {
     refreshRateLimitState()
 
@@ -202,7 +257,8 @@ const handleSearch = () => {
     }
 
     captchaError.value = ''
-    const result = findTrackingRecord(searchForm.referenceNo, searchForm.phone)
+    const liveResult = buildLiveRecord(searchForm.referenceNo, searchForm.phone)
+    const result = liveResult || findTrackingRecord(searchForm.referenceNo, searchForm.phone)
     selectedRecord.value = result || null
     searchResult.value = result ? 'found' : 'not-found'
     createCaptcha()

@@ -89,11 +89,13 @@
 
 <script setup lang="ts">
 import { computed, reactive } from 'vue'
+import { useAdminMvpStore } from '~/composables/useAdminMvpStore'
 import { customerProductMap, customerProducts } from '~/data/customer-products'
 import type { CustomerProduct } from '~/data/customer-products'
 import { generateReferenceNo, normalizePhone } from '~/data/customer-tracking'
 
 const route = useRoute()
+const { createBookingRequest } = useAdminMvpStore()
 
 const fallbackProduct: CustomerProduct = {
     id: 'fallback-product',
@@ -123,6 +125,16 @@ const orderForm = reactive({
 const handleSubmit = async () => {
     const referenceNo = generateReferenceNo()
     const phone = normalizePhone(orderForm.phone)
+
+    createBookingRequest({
+        customerName: orderForm.name.trim() || 'ลูกค้าใหม่',
+        phone,
+        packageName: selectedProduct.value.name,
+        eventDate: orderForm.pickupDate || selectedProduct.value.leadTime,
+        budget: selectedProduct.value.price.replace('฿', ''),
+        referenceNo,
+        note: orderForm.note
+    })
 
     await navigateTo({
         path: '/customer/confirm',

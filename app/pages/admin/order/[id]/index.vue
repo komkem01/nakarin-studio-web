@@ -3,26 +3,26 @@
     <header class="panel rounded-2xl p-5 md:p-6">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p class="text-sm font-semibold tracking-wide text-[#48645d]">Booking Detail</p>
-          <h1 class="mt-1 text-2xl font-bold text-[#21423b] md:text-3xl">{{ booking.referenceNo }}</h1>
-          <p class="mt-1 text-sm text-[#4f6660]">{{ booking.customerName }} • {{ booking.phone }}</p>
+          <p class="text-sm font-semibold tracking-wide text-[#48645d]">Order Detail</p>
+          <h1 class="mt-1 text-2xl font-bold text-[#21423b] md:text-3xl">{{ order.referenceNo }}</h1>
+          <p class="mt-1 text-sm text-[#4f6660]">{{ order.customerName }} • {{ order.phone }}</p>
         </div>
-        <NuxtLink to="/admin/booking" class="btn-ghost rounded-xl px-4 py-2 text-sm font-semibold">กลับหน้ารายการจอง</NuxtLink>
+        <NuxtLink to="/admin/order" class="btn-ghost rounded-xl px-4 py-2 text-sm font-semibold">กลับหน้ารายการคำสั่งซื้อ</NuxtLink>
       </div>
     </header>
 
     <section class="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
       <article class="panel rounded-2xl p-5 space-y-4">
         <div>
-          <h2 class="text-lg font-bold text-[#21423b]">รายละเอียดการจอง</h2>
-          <p class="mt-1 text-sm text-[#4f6660]">ตรวจสอบและอัปเดตสถานะการจองจากหน้ารายละเอียด</p>
+          <h2 class="text-lg font-bold text-[#21423b]">รายละเอียดคำสั่งซื้อ</h2>
+          <p class="mt-1 text-sm text-[#4f6660]">ตรวจสอบและอัปเดตสถานะคำสั่งซื้อจากหน้ารายละเอียด</p>
         </div>
 
         <dl class="grid gap-2 text-sm text-[#4f6660]">
-          <div class="detail-row"><dt>แพ็กเกจ</dt><dd>{{ booking.packageName }}</dd></div>
-          <div class="detail-row"><dt>วันใช้งาน</dt><dd>{{ booking.eventDate }}</dd></div>
-          <div class="detail-row"><dt>งบประมาณ</dt><dd>{{ booking.budget }}</dd></div>
-          <div class="detail-row"><dt>สถานะปัจจุบัน</dt><dd>{{ booking.status }}</dd></div>
+          <div class="detail-row"><dt>สินค้า</dt><dd>{{ order.itemName }}</dd></div>
+          <div class="detail-row"><dt>กำหนดรับสินค้า</dt><dd>{{ order.dueDate }}</dd></div>
+          <div class="detail-row"><dt>ยอดเงิน</dt><dd>{{ order.amount.toLocaleString() }} บาท</dd></div>
+          <div class="detail-row"><dt>สถานะปัจจุบัน</dt><dd>{{ order.status }}</dd></div>
         </dl>
 
         <div class="grid gap-3">
@@ -33,7 +33,7 @@
                 {{ nextStatus }}
               </button>
               <ul v-if="isStatusMenuOpen" class="dropdown dropdown-down dropdown-full menu rounded-xl bg-white shadow-md" @click.stop>
-                <li v-for="status in bookingStatuses" :key="status">
+                <li v-for="status in orderStatuses" :key="status">
                   <button type="button" class="dropdown-item" @click="selectStatus(status)">{{ status }}</button>
                 </li>
               </ul>
@@ -46,25 +46,14 @@
               v-model="statusNote"
               rows="3"
               class="field-input resize-none"
-              placeholder="เช่น รอลูกค้ายืนยันสถานที่"
+              placeholder="เช่น ลูกค้าขอเลื่อนเวลารับสินค้า"
             ></textarea>
           </label>
 
           <div class="flex flex-wrap gap-2">
             <button class="btn-brand rounded-xl px-4 py-2 text-sm font-semibold" @click="requestStatusSave">บันทึกสถานะ</button>
-            <button
-              class="btn-ghost rounded-xl px-4 py-2 text-sm font-semibold"
-              :disabled="Boolean(booking.convertedOrderId)"
-              @click="requestConvertToOrder"
-            >
-              {{ booking.convertedOrderId ? 'แปลงเป็นคำสั่งซื้อแล้ว' : 'ยืนยันและสร้างคำสั่งซื้อ' }}
-            </button>
           </div>
 
-          <p v-if="flashMessage" class="text-sm text-[#4f6660]">{{ flashMessage }}</p>
-          <NuxtLink v-if="booking.convertedOrderId" :to="`/admin/order/${booking.convertedOrderId}`" class="link-brand text-sm font-semibold">
-            ไปยังคำสั่งซื้อที่สร้างจากรายการนี้
-          </NuxtLink>
         </div>
       </article>
 
@@ -82,76 +71,84 @@
 
     <dialog ref="confirmDialog" class="modal">
       <div class="modal-box">
-        <h3 class="text-lg font-bold text-[#21423b]">{{ confirmTitle }}</h3>
-        <p class="py-3 text-sm text-[#48645d]">{{ confirmMessage }}</p>
+        <h3 class="text-lg font-bold text-[#21423b]">ยืนยันการบันทึกสถานะ</h3>
+        <p class="py-3 text-sm text-[#48645d]">ต้องการบันทึกสถานะเป็น {{ nextStatus }} ใช่หรือไม่</p>
         <div class="modal-action">
           <form method="dialog">
-            <button type="submit" class="btn-ghost rounded-xl px-3 py-2 text-xs font-semibold" @click="clearPendingAction">ยกเลิก</button>
+            <button type="submit" class="btn-ghost rounded-xl px-3 py-2 text-xs font-semibold">ยกเลิก</button>
           </form>
-          <button type="button" class="btn-brand rounded-xl px-3 py-2 text-xs font-semibold" @click="executePendingAction">ยืนยัน</button>
+          <button type="button" class="btn-brand rounded-xl px-3 py-2 text-xs font-semibold" @click="executeStatusSave">ยืนยัน</button>
         </div>
       </div>
       <form method="dialog" class="modal-backdrop">
-        <button type="submit" @click="clearPendingAction">close</button>
+        <button type="submit">close</button>
       </form>
     </dialog>
+
+    <div class="toast toast-top toast-end">
+      <div v-for="toast in toasts" :key="toast.id" class="alert" :class="`alert-${toast.type}`">
+        <span>{{ toast.message }}</span>
+      </div>
+    </div>
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useAdminMvpStore } from '~/composables/useAdminMvpStore'
-import type { AdminBooking } from '~/data/admin-mvp'
+import type { AdminOrder } from '~/data/admin-mvp'
 
 definePageMeta({
   layout: 'admin'
 })
 
-const route = useRoute()
-const { bookings, bookingHistory, updateBookingStatus, confirmBookingToOrder } = useAdminMvpStore()
+type ToastType = 'success' | 'info'
 
-const fallbackBooking: AdminBooking = {
-  id: 'fallback-booking',
+type ToastItem = {
+  id: number
+  type: ToastType
+  message: string
+}
+
+const route = useRoute()
+const { orders, orderHistory, updateOrderStatus } = useAdminMvpStore()
+
+const fallbackOrder: AdminOrder = {
+  id: 'fallback-order',
   referenceNo: 'NS-UNKNOWN',
   customerName: 'ไม่พบข้อมูล',
   phone: '-',
-  packageName: 'ไม่พบรายการ',
-  eventDate: '-',
-  budget: '-',
-  status: 'รอยืนยัน'
+  itemName: 'ไม่พบรายการ',
+  amount: 0,
+  dueDate: '-',
+  status: 'ใหม่'
 }
 
-const booking = computed<AdminBooking>(() => {
+const order = computed<AdminOrder>(() => {
   const id = String(route.params.id || '')
-  return bookings.value.find((item) => item.id === id) || bookings.value[0] || fallbackBooking
+  return orders.value.find((item) => item.id === id) || orders.value[0] || fallbackOrder
 })
 
-const history = computed(() => bookingHistory.value[booking.value.id] || [])
-const bookingStatuses: AdminBooking['status'][] = ['รอยืนยัน', 'กำลังเตรียมงาน', 'พร้อมส่งมอบ', 'ส่งมอบแล้ว', 'แปลงเป็นคำสั่งซื้อแล้ว']
-const nextStatus = ref<AdminBooking['status']>(booking.value.status)
+const history = computed(() => orderHistory.value[order.value.id] || [])
+const orderStatuses: AdminOrder['status'][] = ['ใหม่', 'กำลังจัดทำ', 'พร้อมรับสินค้า', 'ส่งมอบแล้ว']
+const nextStatus = ref<AdminOrder['status']>(order.value.status)
 const statusNote = ref('')
-const flashMessage = ref('')
 const isStatusMenuOpen = ref(false)
-
 const confirmDialog = ref<HTMLDialogElement | null>(null)
-const pendingAction = ref<'status' | 'convert' | null>(null)
+const toasts = ref<ToastItem[]>([])
+let toastSeed = 0
 
-const confirmTitle = computed(() => {
-  return pendingAction.value === 'convert' ? 'ยืนยันการแปลงเป็นคำสั่งซื้อ' : 'ยืนยันการบันทึกสถานะ'
-})
+const showToast = (type: ToastType, message: string) => {
+  const id = ++toastSeed
+  toasts.value = [...toasts.value, { id, type, message }]
+  window.setTimeout(() => {
+    toasts.value = toasts.value.filter((item) => item.id !== id)
+  }, 2600)
+}
 
-const confirmMessage = computed(() => {
-  if (pendingAction.value === 'convert') {
-    return `ต้องการแปลงรายการ ${booking.value.referenceNo} เป็นคำสั่งซื้อหรือไม่`
-  }
-
-  return `ต้องการบันทึกสถานะเป็น ${nextStatus.value} ใช่หรือไม่`
-})
-
-watch(booking, (value) => {
+watch(order, (value) => {
   nextStatus.value = value.status
   statusNote.value = ''
-  flashMessage.value = ''
   isStatusMenuOpen.value = false
 })
 
@@ -159,13 +156,9 @@ const toggleStatusMenu = () => {
   isStatusMenuOpen.value = !isStatusMenuOpen.value
 }
 
-const selectStatus = (value: AdminBooking['status']) => {
+const selectStatus = (value: AdminOrder['status']) => {
   nextStatus.value = value
   isStatusMenuOpen.value = false
-}
-
-const clearPendingAction = () => {
-  pendingAction.value = null
 }
 
 const closeMenus = () => {
@@ -181,43 +174,19 @@ onBeforeUnmount(() => {
 })
 
 const requestStatusSave = () => {
-  pendingAction.value = 'status'
   confirmDialog.value?.showModal()
 }
 
-const requestConvertToOrder = () => {
-  if (booking.value.convertedOrderId) return
-  pendingAction.value = 'convert'
-  confirmDialog.value?.showModal()
-}
+const executeStatusSave = () => {
+  const changed = updateOrderStatus(
+    order.value.id,
+    nextStatus.value,
+    'Admin',
+    statusNote.value.trim() || 'อัปเดตสถานะจากหน้ารายละเอียด'
+  )
 
-const executePendingAction = async () => {
-  const action = pendingAction.value
-  clearPendingAction()
   confirmDialog.value?.close()
-
-  if (action === 'status') {
-    const changed = updateBookingStatus(
-      booking.value.id,
-      nextStatus.value,
-      'Admin',
-      statusNote.value.trim() || 'อัปเดตสถานะจากหน้ารายละเอียด'
-    )
-
-    flashMessage.value = changed ? 'บันทึกสถานะเรียบร้อย' : 'ไม่มีการเปลี่ยนแปลง'
-    return
-  }
-
-  if (action === 'convert') {
-    const orderId = confirmBookingToOrder(booking.value.id, 'Admin')
-    if (!orderId) {
-      flashMessage.value = 'ไม่สามารถสร้างคำสั่งซื้อได้'
-      return
-    }
-
-    flashMessage.value = `สร้างคำสั่งซื้อเรียบร้อย (${orderId})`
-    await navigateTo(`/admin/order/${orderId}`)
-  }
+  showToast(changed ? 'success' : 'info', changed ? 'บันทึกสถานะเรียบร้อย' : 'ไม่มีการเปลี่ยนแปลง')
 }
 </script>
 
@@ -347,20 +316,6 @@ const executePendingAction = async () => {
   color: #fff;
 }
 
-.btn-ghost:disabled {
-  opacity: 0.65;
-  cursor: not-allowed;
-}
-
-.link-brand {
-  color: #0f766e;
-}
-
-.link-brand:hover {
-  color: #115e59;
-  text-decoration: underline;
-}
-
 .modal {
   border: none;
   padding: 0;
@@ -394,4 +349,49 @@ const executePendingAction = async () => {
 .modal-backdrop > button {
   display: none;
 }
+
+.toast {
+  position: fixed;
+  z-index: 60;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.toast-top {
+  top: 1rem;
+}
+
+.toast-end {
+  right: 1rem;
+}
+
+.alert {
+  min-width: 14rem;
+  max-width: min(86vw, 22rem);
+  border-radius: 0.85rem;
+  border: 1px solid transparent;
+  padding: 0.65rem 0.85rem;
+  font-size: 0.84rem;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+}
+
+.alert-info {
+  color: #0f3d35;
+  border-color: rgba(13, 148, 136, 0.28);
+  background: rgba(204, 251, 241, 0.96);
+}
+
+.alert-success {
+  color: #064e3b;
+  border-color: rgba(22, 163, 74, 0.28);
+  background: rgba(220, 252, 231, 0.96);
+}
+
+.alert-warning {
+  color: #7c2d12;
+  border-color: rgba(234, 88, 12, 0.3);
+  background: rgba(255, 237, 213, 0.96);
+}
+
 </style>

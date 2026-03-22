@@ -3,8 +3,8 @@
     <header class="panel rounded-2xl p-5 md:p-6">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p class="text-sm font-semibold tracking-wide text-[#48645d]">Booking Management</p>
-          <h1 class="mt-1 text-2xl font-bold text-[#21423b] md:text-3xl">รายการจองงานสั่งทำ</h1>
+          <p class="text-sm font-semibold tracking-wide text-[#48645d]">Order Management</p>
+          <h1 class="mt-1 text-2xl font-bold text-[#21423b] md:text-3xl">รายการคำสั่งซื้อสินค้า</h1>
         </div>
       </div>
     </header>
@@ -21,18 +21,18 @@
               <li>
                 <button type="button" class="dropdown-item" @click="selectFilter('ทั้งหมด')">ทั้งหมด</button>
               </li>
-              <li v-for="status in bookingStatuses" :key="status">
+              <li v-for="status in orderStatuses" :key="status">
                 <button type="button" class="dropdown-item" @click="selectFilter(status)">{{ status }}</button>
               </li>
             </ul>
           </div>
         </label>
-        <span class="text-xs text-[#5f7871]">แสดง {{ filteredBookings.length }} จาก {{ bookings.length }} รายการ</span>
+        <span class="text-xs text-[#5f7871]">แสดง {{ filteredOrders.length }} จาก {{ orders.length }} รายการ</span>
       </div>
     </section>
 
     <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-      <article v-for="item in filteredBookings" :key="item.id" class="panel rounded-2xl p-4">
+      <article v-for="item in filteredOrders" :key="item.id" class="panel rounded-2xl p-4">
         <div class="mb-3 flex items-start justify-between gap-3">
           <div>
             <p class="text-xs font-semibold tracking-wide text-[#5a7770]">{{ item.referenceNo }}</p>
@@ -43,16 +43,16 @@
 
         <dl class="grid gap-2 text-sm text-[#4f6660]">
           <div class="flex items-center justify-between gap-2">
-            <dt>แพ็กเกจ</dt>
-            <dd class="font-semibold text-[#21423b]">{{ item.packageName }}</dd>
+            <dt>สินค้า</dt>
+            <dd class="font-semibold text-[#21423b]">{{ item.itemName }}</dd>
           </div>
           <div class="flex items-center justify-between gap-2">
-            <dt>วันใช้งาน</dt>
-            <dd class="font-semibold text-[#21423b]">{{ item.eventDate }}</dd>
+            <dt>กำหนดรับสินค้า</dt>
+            <dd class="font-semibold text-[#21423b]">{{ item.dueDate }}</dd>
           </div>
           <div class="flex items-center justify-between gap-2">
-            <dt>งบประมาณ</dt>
-            <dd class="font-semibold text-[#21423b]">{{ item.budget }}</dd>
+            <dt>ยอดรวม</dt>
+            <dd class="font-semibold text-[#21423b]">{{ item.amount.toLocaleString() }} บาท</dd>
           </div>
           <div class="flex items-center justify-between gap-2">
             <dt>โทรศัพท์</dt>
@@ -68,7 +68,7 @@
                 {{ statusDrafts[item.id] }}
               </button>
               <ul v-if="openStatusMenuId === item.id" class="dropdown dropdown-down dropdown-full menu rounded-xl bg-white shadow-md" @click.stop>
-                <li v-for="status in bookingStatuses" :key="status">
+                <li v-for="status in orderStatuses" :key="status">
                   <button type="button" class="dropdown-item" @click="selectStatus(item.id, status)">{{ status }}</button>
                 </li>
               </ul>
@@ -78,50 +78,20 @@
         </div>
 
         <div class="mt-4 flex flex-wrap items-center justify-between gap-2">
-          <NuxtLink :to="`/admin/booking/${item.id}`" class="link-brand text-sm font-semibold">รายละเอียดการจอง</NuxtLink>
+          <NuxtLink :to="`/admin/order/${item.id}`" class="link-brand text-sm font-semibold">รายละเอียดคำสั่งซื้อ</NuxtLink>
           <div class="relative">
             <button type="button" class="btn-menu rounded-xl px-3 py-2 text-xs font-semibold" @click.stop="toggleMenu(item.id)">
               เมนูจัดการ
             </button>
-            <ul v-if="openMenuId === item.id" class="dropdown menu w-48 rounded-xl bg-white shadow-md" @click.stop>
+            <ul v-if="openMenuId === item.id" class="dropdown menu w-44 rounded-xl bg-white shadow-md" @click.stop>
               <li>
-                <NuxtLink :to="`/admin/booking/${item.id}`" class="dropdown-item">รายละเอียด</NuxtLink>
-              </li>
-              <li>
-                <button
-                  type="button"
-                  class="dropdown-item"
-                  :disabled="Boolean(item.convertedOrderId)"
-                  @click="requestConvert(item.id); closeMenu()"
-                >
-                  {{ item.convertedOrderId ? 'แปลงแล้ว' : 'ยืนยันเป็นคำสั่งซื้อ' }}
-                </button>
+                <NuxtLink :to="`/admin/order/${item.id}`" class="dropdown-item" @click="closeMenu">รายละเอียด</NuxtLink>
               </li>
             </ul>
           </div>
         </div>
       </article>
     </section>
-
-    <dialog ref="confirmConvertDialog" class="modal">
-      <div class="modal-box">
-        <h3 class="text-lg font-bold text-[#21423b]">ยืนยันการแปลงเป็นคำสั่งซื้อ</h3>
-        <p class="py-3 text-sm text-[#48645d]">
-          ต้องการแปลงรายการจอง
-          <span class="font-bold text-[#21423b]">{{ pendingConvertRef }}</span>
-          เป็นคำสั่งซื้อใช่หรือไม่
-        </p>
-        <div class="modal-action">
-          <form method="dialog">
-            <button type="submit" class="btn-ghost rounded-xl px-3 py-2 text-xs font-semibold" @click="clearPendingConvert">ยกเลิก</button>
-          </form>
-          <button type="button" class="btn-brand rounded-xl px-3 py-2 text-xs font-semibold" @click="confirmConvert">ยืนยัน</button>
-        </div>
-      </div>
-      <form method="dialog" class="modal-backdrop">
-        <button type="submit" @click="clearPendingConvert">close</button>
-      </form>
-    </dialog>
 
     <div class="toast toast-top toast-end">
       <div v-for="toast in toasts" :key="toast.id" class="alert" :class="`alert-${toast.type}`">
@@ -134,13 +104,13 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useAdminMvpStore } from '~/composables/useAdminMvpStore'
-import type { AdminBooking } from '~/data/admin-mvp'
+import type { AdminOrder } from '~/data/admin-mvp'
 
 definePageMeta({
   layout: 'admin'
 })
 
-type ToastType = 'success' | 'info' | 'warning'
+type ToastType = 'success' | 'info'
 
 type ToastItem = {
   id: number
@@ -148,23 +118,20 @@ type ToastItem = {
   message: string
 }
 
-const { bookings, updateBookingStatus, confirmBookingToOrder } = useAdminMvpStore()
+const { orders, updateOrderStatus } = useAdminMvpStore()
 
-const bookingStatuses: AdminBooking['status'][] = ['รอยืนยัน', 'กำลังเตรียมงาน', 'พร้อมส่งมอบ', 'ส่งมอบแล้ว', 'แปลงเป็นคำสั่งซื้อแล้ว']
-const statusFilter = ref<'ทั้งหมด' | AdminBooking['status']>('ทั้งหมด')
-const statusDrafts = reactive<Record<string, AdminBooking['status']>>({})
+const orderStatuses: AdminOrder['status'][] = ['ใหม่', 'กำลังจัดทำ', 'พร้อมรับสินค้า', 'ส่งมอบแล้ว']
+const statusFilter = ref<'ทั้งหมด' | AdminOrder['status']>('ทั้งหมด')
+const statusDrafts = reactive<Record<string, AdminOrder['status']>>({})
 const openMenuId = ref<string | null>(null)
 const openStatusMenuId = ref<string | null>(null)
 const isFilterMenuOpen = ref(false)
-const confirmConvertDialog = ref<HTMLDialogElement | null>(null)
-const pendingConvertId = ref<string | null>(null)
-const pendingConvertRef = ref('')
 const toasts = ref<ToastItem[]>([])
 let toastSeed = 0
 
-const filteredBookings = computed(() => {
-  if (statusFilter.value === 'ทั้งหมด') return bookings.value
-  return bookings.value.filter((item) => item.status === statusFilter.value)
+const filteredOrders = computed(() => {
+  if (statusFilter.value === 'ทั้งหมด') return orders.value
+  return orders.value.filter((item) => item.status === statusFilter.value)
 })
 
 const showToast = (type: ToastType, message: string) => {
@@ -189,7 +156,7 @@ const toggleFilterMenu = () => {
   isFilterMenuOpen.value = !isFilterMenuOpen.value
 }
 
-const selectFilter = (value: 'ทั้งหมด' | AdminBooking['status']) => {
+const selectFilter = (value: 'ทั้งหมด' | AdminOrder['status']) => {
   statusFilter.value = value
   isFilterMenuOpen.value = false
 }
@@ -198,57 +165,21 @@ const toggleStatusMenu = (id: string) => {
   openStatusMenuId.value = openStatusMenuId.value === id ? null : id
 }
 
-const selectStatus = (id: string, status: AdminBooking['status']) => {
+const selectStatus = (id: string, status: AdminOrder['status']) => {
   statusDrafts[id] = status
   openStatusMenuId.value = null
-}
-
-const clearPendingConvert = () => {
-  pendingConvertId.value = null
-  pendingConvertRef.value = ''
-}
-
-const requestConvert = (id: string) => {
-  const source = bookings.value.find((item) => item.id === id)
-  if (!source) return
-
-  if (source.convertedOrderId) {
-    showToast('info', 'รายการนี้ถูกแปลงเป็นคำสั่งซื้อแล้ว')
-    return
-  }
-
-  pendingConvertId.value = id
-  pendingConvertRef.value = source.referenceNo
-  confirmConvertDialog.value?.showModal()
-}
-
-const confirmConvert = async () => {
-  const id = pendingConvertId.value
-  if (!id) return
-
-  const orderId = confirmBookingToOrder(id, 'Admin')
-  clearPendingConvert()
-  confirmConvertDialog.value?.close()
-
-  if (!orderId) {
-    showToast('warning', 'ไม่สามารถแปลงรายการจองเป็นคำสั่งซื้อได้')
-    return
-  }
-
-  showToast('success', `สร้างคำสั่งซื้อเรียบร้อย (${orderId})`)
-  await navigateTo(`/admin/order/${orderId}`)
 }
 
 const handleSaveStatus = (id: string) => {
   const draft = statusDrafts[id]
   if (!draft) return
 
-  const success = updateBookingStatus(id, draft, 'Admin', 'อัปเดตสถานะจากหน้ารายการจอง')
+  const success = updateOrderStatus(id, draft, 'Admin', 'อัปเดตสถานะจากหน้ารายการคำสั่งซื้อ')
   showToast(success ? 'success' : 'info', success ? 'บันทึกสถานะเรียบร้อย' : 'ไม่มีการเปลี่ยนแปลง')
 }
 
 watch(
-  bookings,
+  orders,
   (items) => {
     for (const item of items) {
       statusDrafts[item.id] = item.status
@@ -320,17 +251,6 @@ onBeforeUnmount(() => {
 
 .btn-brand:hover {
   filter: brightness(1.06);
-}
-
-.btn-ghost {
-  color: #065f46;
-  border: 1px solid rgba(6, 95, 70, 0.2);
-  background: rgba(255, 255, 255, 0.86);
-}
-
-.btn-ghost:hover {
-  background: #065f46;
-  color: #fff;
 }
 
 .btn-menu {
@@ -410,45 +330,6 @@ onBeforeUnmount(() => {
   background: rgba(6, 95, 70, 0.1);
 }
 
-.dropdown-item:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.modal {
-  border: none;
-  padding: 0;
-  background: transparent;
-}
-
-.modal::backdrop {
-  background: rgba(15, 23, 42, 0.42);
-  backdrop-filter: blur(1px);
-}
-
-.modal-box {
-  width: min(92vw, 24rem);
-  border-radius: 1rem;
-  border: 1px solid rgba(6, 95, 70, 0.16);
-  background: #fff;
-  padding: 1rem;
-}
-
-.modal-action {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-}
-
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-}
-
-.modal-backdrop > button {
-  display: none;
-}
-
 .toast {
   position: fixed;
   z-index: 60;
@@ -492,4 +373,5 @@ onBeforeUnmount(() => {
   border-color: rgba(234, 88, 12, 0.3);
   background: rgba(255, 237, 213, 0.96);
 }
+
 </style>

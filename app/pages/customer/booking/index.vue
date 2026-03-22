@@ -69,7 +69,10 @@
 
 <script setup lang="ts">
 import { reactive } from 'vue'
+import { useAdminMvpStore } from '~/composables/useAdminMvpStore'
 import { generateReferenceNo, normalizePhone } from '~/data/customer-tracking'
+
+const { createBookingRequest } = useAdminMvpStore()
 
 const packages = [
     {
@@ -105,6 +108,16 @@ const bookingForm = reactive({
 const handleSubmit = async () => {
     const referenceNo = generateReferenceNo()
     const phone = normalizePhone(bookingForm.phone)
+
+    createBookingRequest({
+        customerName: bookingForm.name.trim() || 'ลูกค้าใหม่',
+        phone,
+        packageName: 'จองคิวงานบายศรี',
+        eventDate: bookingForm.date || '-',
+        budget: 'ยังไม่ระบุ',
+        referenceNo,
+        note: bookingForm.note
+    })
 
     await navigateTo({
         path: '/customer/confirm',
