@@ -41,7 +41,7 @@
                 {{ statusLabelByValue(nextStatus) }}
               </button>
               <ul v-if="isStatusMenuOpen" class="dropdown dropdown-down dropdown-full menu rounded-xl bg-white shadow-md" @click.stop>
-                <li v-for="status in statusOptions" :key="status.value">
+                <li v-for="status in selectableStatusOptions" :key="status.value">
                   <button type="button" class="dropdown-item" @click="selectStatus(status.value)">{{ status.label }}</button>
                 </li>
               </ul>
@@ -64,12 +64,12 @@
           </div>
 
           <div class="flex flex-wrap gap-2">
-            <button class="btn-brand rounded-xl px-4 py-2 text-sm font-semibold" :disabled="isSavingStatus" @click="requestStatusSave">
+            <button class="btn-brand rounded-xl px-4 py-2 text-sm font-semibold" :disabled="isSavingStatus || !canSaveCurrentStatus" @click="requestStatusSave">
               {{ isSavingStatus ? 'กำลังบันทึก...' : 'บันทึกสถานะ' }}
             </button>
             <button
               class="btn-ghost rounded-xl px-4 py-2 text-sm font-semibold"
-              :disabled="isConvertingOrder"
+              :disabled="isConvertingOrder || !canConvertCurrentBooking"
               @click="requestConvertToOrder"
             >
               {{ isConvertingOrder ? 'กำลังแปลง...' : 'ยืนยันและสร้างคำสั่งซื้อ' }}
@@ -387,6 +387,25 @@ const fallbackBooking: BookingViewItem = {
 
 const statusLabelByValue = (status: BookingStatus) => statusLabelMap[status] || status
 
+const allowedNextStatuses = (from: BookingStatus): BookingStatus[] => {
+  if (from === 'pending') return ['pending', 'processing', 'canceled']
+  if (from === 'processing') return ['processing', 'completed', 'canceled']
+  if (from === 'completed') return ['completed']
+  return ['canceled']
+}
+
+const selectableStatusOptions = computed(() => {
+  const allowed = new Set(allowedNextStatuses(booking.value.statusValue))
+  return statusOptions.filter((item) => allowed.has(item.value))
+})
+
+const canConvertCurrentBooking = computed(() => booking.value.statusValue !== 'canceled')
+const canSaveCurrentStatus = computed(() => {
+  if (!bookingData.value) return false
+  if (bookingData.value.status === nextStatus.value) return false
+  return allowedNextStatuses(bookingData.value.status).includes(nextStatus.value)
+})
+
 const formatDate = (value?: string | null) => {
   if (!value) return '-'
   const date = new Date(value)
@@ -699,11 +718,13 @@ watch(() => route.params.id, () => {
 })
 
 const requestStatusSave = () => {
+  if (!canSaveCurrentStatus.value) return
   pendingAction.value = 'status'
   isConfirmModalOpen.value = true
 }
 
 const requestConvertToOrder = () => {
+  if (!canConvertCurrentBooking.value) return
   pendingAction.value = 'convert'
   isConfirmModalOpen.value = true
 }
@@ -777,6 +798,10 @@ const executePendingAction = async () => {
       showToast('info', 'ไม่มีการเปลี่ยนแปลง')
       return
     }
+    if (!allowedNextStatuses(bookingData.value.status).includes(nextStatus.value)) {
+      showToast('warning', 'ไม่สามารถเปลี่ยนสถานะตามลำดับนี้ได้')
+      return
+    }
 
     isSavingStatus.value = true
     try {
@@ -799,7 +824,7 @@ const executePendingAction = async () => {
   }
 
   if (action === 'convert') {
-    if (!bookingData.value || isConvertingOrder.value) {
+    if (!bookingData.value || isConvertingOrder.value || !canConvertCurrentBooking.value) {
       return
     }
 

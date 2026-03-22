@@ -72,7 +72,7 @@
                 {{ statusLabelByValue(statusDrafts[item.id] || item.statusValue) }}
               </button>
               <ul v-if="openStatusMenuId === item.id" class="dropdown dropdown-down dropdown-full menu rounded-xl bg-white shadow-md" @click.stop>
-                <li v-for="status in statusOptions" :key="status.value">
+                <li v-for="status in selectableStatusOptions(item.statusValue)" :key="status.value">
                   <button type="button" class="dropdown-item" @click="selectStatus(item.id, status.value)">{{ status.label }}</button>
                 </li>
               </ul>
@@ -80,7 +80,7 @@
           </label>
           <button
             class="btn-brand rounded-xl px-3 py-2 text-xs font-semibold"
-            :disabled="isSavingStatus[item.id] || !statusDrafts[item.id] || statusDrafts[item.id] === item.statusValue"
+            :disabled="isSavingStatus[item.id] || !canSaveStatus(item)"
             @click="handleSaveStatus(item.id)"
           >
             {{ isSavingStatus[item.id] ? 'กำลังบันทึก...' : 'บันทึกสถานะ' }}
@@ -101,7 +101,7 @@
                 <button
                   type="button"
                   class="dropdown-item"
-                  :disabled="Boolean(isConvertingBooking[item.id])"
+                  :disabled="Boolean(isConvertingBooking[item.id]) || !canConvertBooking(item)"
                   @click="requestConvert(item.id); closeMenu()"
                 >
                   {{ isConvertingBooking[item.id] ? 'กำลังแปลง...' : 'ยืนยันเป็นคำสั่งซื้อ' }}
@@ -129,6 +129,7 @@ type BookingApiItem = {
   id: string
   booking_no: string
   status: BookingStatus
+  delivery_note?: string | null
   created_at: string
 }
 
@@ -191,6 +192,18 @@ const isFilterMenuOpen = ref(false)
 
 const statusLabelByValue = (status: BookingStatus) => statusLabelMap[status] || status
 
+const allowedNextStatuses = (from: BookingStatus): BookingStatus[] => {
+  if (from === 'pending') return ['pending', 'processing', 'canceled']
+  if (from === 'processing') return ['processing', 'completed', 'canceled']
+  if (from === 'completed') return ['completed']
+  return ['canceled']
+}
+
+const selectableStatusOptions = (from: BookingStatus) => {
+  const allowed = new Set(allowedNextStatuses(from))
+  return statusOptions.filter((item) => allowed.has(item.value))
+}
+
 const statusFilterLabel = computed(() => {
   if (statusFilter.value === 'all') return 'ทั้งหมด'
   return statusLabelByValue(statusFilter.value)
@@ -229,6 +242,23 @@ const mapPackageName = (items: BookingItemApiItem[]) => {
   const firstName = names[0] || '-'
   if (names.length === 1) return firstName
   return `${firstName} +${names.length - 1} รายการ`
+}
+
+const mapEventDate = (booking: BookingApiItem) => {
+  const note = (booking.delivery_note || '').trim()
+  if (note.startsWith('วันที่ใช้งาน:')) {
+    const extracted = note.replace('วันที่ใช้งาน:', '').trim()
+    if (extracted) return extracted
+  }
+  return formatDate(booking.created_at)
+}
+
+const canConvertBooking = (item: BookingViewItem) => item.statusValue !== 'canceled'
+
+const canSaveStatus = (item: BookingViewItem) => {
+  const draft = statusDrafts[item.id]
+  if (!draft || draft === item.statusValue) return false
+  return allowedNextStatuses(item.statusValue).includes(draft)
 }
 
 const loadBookings = async () => {
@@ -271,7 +301,7 @@ const loadBookings = async () => {
         customerName: mapCustomerName(detail),
         phone: detail?.phone || '-',
         packageName: mapPackageName(bookingItems),
-        eventDate: formatDate(booking.created_at),
+        eventDate: mapEventDate(booking),
         budget: total > 0 ? formatCurrency(total) : '-',
         statusValue: booking.status,
         statusLabel: statusLabelByValue(booking.status)
@@ -320,7 +350,8 @@ const selectStatus = (id: string, status: BookingStatus) => {
 }
 
 const requestConvert = async (id: string) => {
-  if (isConvertingBooking[id]) return
+  const source = bookings.value.find((item) => item.id === id)
+  if (!source || isConvertingBooking[id] || !canConvertBooking(source)) return
 
   isConvertingBooking[id] = true
   try {
@@ -346,6 +377,10 @@ const handleSaveStatus = async (id: string) => {
   const source = bookings.value.find((item) => item.id === id)
   if (!source || source.statusValue === draft) {
     showToast('info', 'ไม่มีการเปลี่ยนแปลง')
+    return
+  }
+  if (!allowedNextStatuses(source.statusValue).includes(draft)) {
+    showToast('warning', 'ไม่สามารถเปลี่ยนสถานะตามลำดับนี้ได้')
     return
   }
 
