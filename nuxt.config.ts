@@ -4,6 +4,30 @@ import vueJsx from '@vitejs/plugin-vue-jsx'
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
+  modules: ['@nuxtjs/tailwindcss'],
+  css: ['~/assets/css/tailwind.css'],
+  routeRules: {
+    '/admin': {
+      headers: {
+        'X-Robots-Tag': 'noindex, nofollow, noarchive'
+      }
+    },
+    '/admin/**': {
+      headers: {
+        'X-Robots-Tag': 'noindex, nofollow, noarchive'
+      }
+    },
+    '/manage/login': {
+      headers: {
+        'X-Robots-Tag': 'noindex, nofollow, noarchive'
+      }
+    },
+    '/manage/**': {
+      headers: {
+        'X-Robots-Tag': 'noindex, nofollow, noarchive'
+      }
+    }
+  },
   vite: {
     plugins: [vueJsx()]
   }
