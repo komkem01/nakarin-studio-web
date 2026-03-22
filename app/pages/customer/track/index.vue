@@ -33,21 +33,11 @@
                             <input v-model="searchForm.phone" type="tel" placeholder="08x-xxx-xxxx" class="field" />
                         </label>
 
-                        <label class="block">
-                            <span class="mb-1 block text-sm font-medium text-[#36524b]">
-                                CAPTCHA: {{ captcha.a }} + {{ captcha.b }} = ?
-                            </span>
-                            <input v-model="captchaAnswer" type="text" inputmode="numeric" placeholder="กรอกผลลัพธ์" class="field" />
-                        </label>
                     </div>
 
                     <button type="submit" :disabled="isLocked" class="btn-primary mt-6 w-full rounded-xl px-5 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-70">
                         ค้นหาสถานะ
                     </button>
-
-                    <p v-if="captchaError" class="mt-3 text-sm text-[#9b2c2c]">
-                        {{ captchaError }}
-                    </p>
 
                     <p v-if="searchResult === 'not-found'" class="mt-3 text-sm text-[#9b2c2c]">
                         ไม่พบข้อมูล กรุณาตรวจสอบเลขอ้างอิงและเบอร์โทรอีกครั้ง
@@ -121,21 +111,12 @@ const searchForm = reactive({
 
 const selectedRecord = ref<TrackingRecord | null>(null)
 const searchResult = ref<'idle' | 'found' | 'not-found'>('idle')
-const captcha = reactive({ a: 0, b: 0 })
-const captchaAnswer = ref('')
-const captchaError = ref('')
 const lockUntil = ref(0)
 const nowTick = ref(Date.now())
 let ticker: ReturnType<typeof setInterval> | null = null
 
 const isLocked = computed(() => lockUntil.value > nowTick.value)
 const lockRemainingSeconds = computed(() => Math.max(0, Math.ceil((lockUntil.value - nowTick.value) / 1000)))
-
-const createCaptcha = () => {
-    captcha.a = Math.floor(Math.random() * 9) + 1
-    captcha.b = Math.floor(Math.random() * 9) + 1
-    captchaAnswer.value = ''
-}
 
 const getAttemptTimestamps = (): number[] => {
     if (!import.meta.client) return []
@@ -247,25 +228,13 @@ const handleSearch = () => {
     registerAttemptAndUpdateLimit()
     refreshRateLimitState()
 
-    const expected = captcha.a + captcha.b
-    if (Number(captchaAnswer.value) !== expected) {
-        captchaError.value = 'CAPTCHA ไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง'
-        selectedRecord.value = null
-        searchResult.value = 'idle'
-        createCaptcha()
-        return
-    }
-
-    captchaError.value = ''
     const liveResult = buildLiveRecord(searchForm.referenceNo, searchForm.phone)
     const result = liveResult || findTrackingRecord(searchForm.referenceNo, searchForm.phone)
     selectedRecord.value = result || null
     searchResult.value = result ? 'found' : 'not-found'
-    createCaptcha()
 }
 
 onMounted(() => {
-    createCaptcha()
     refreshRateLimitState()
 
     ticker = setInterval(() => {
