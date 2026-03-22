@@ -53,8 +53,21 @@
                         <p class="badge-brand inline-flex rounded-full px-3 py-1 text-xs font-semibold">
                             {{ selectedRecord.type === 'booking' ? 'งานจองคิว' : 'คำสั่งซื้อสินค้า' }}
                         </p>
+                        <div class="mt-3">
+                            <p class="inline-flex rounded-full px-3 py-1 text-xs font-semibold" :class="paymentBadgeClass">
+                                {{ paymentStatusLabel }}
+                            </p>
+                        </div>
                         <h3 class="font-display mt-3 text-2xl">{{ selectedRecord.itemName }}</h3>
                         <p class="mt-1 text-sm text-[#4f6660]">เลขอ้างอิง {{ selectedRecord.referenceNo }}</p>
+
+                        <div v-if="showUnpaidBadge" class="mt-4 rounded-xl border border-[rgba(190,24,93,0.2)] bg-[rgba(190,24,93,0.08)] p-4">
+                            <p class="text-sm font-semibold text-[#9f1239]">การจองนี้ยังไม่ชำระเงิน</p>
+                            <p class="mt-1 text-sm text-[#9f1239]">กรุณาชำระเงินเพื่อให้ทีมงานตรวจสอบและดำเนินการต่อ</p>
+                            <NuxtLink :to="paymentLink" class="btn-primary mt-3 inline-flex rounded-xl px-4 py-2 text-sm font-semibold">
+                                ไปหน้าชำระเงิน
+                            </NuxtLink>
+                        </div>
 
                         <div class="mt-4 rounded-xl border border-[rgba(6,95,70,0.14)] bg-white/85 p-4">
                             <p class="text-sm text-[#4f6660]">สถานะล่าสุด</p>
@@ -99,7 +112,7 @@ const route = useRoute()
 const ATTEMPT_WINDOW_MS = 60 * 1000
 const MAX_ATTEMPTS_PER_WINDOW = 5
 const STORAGE_KEY = 'customer-track-attempts'
-const { trackBooking } = usePublicBookingApi()
+const { trackBooking, listPayments } = usePublicBookingApi()
 
 const searchForm = reactive({
     referenceNo: '',
@@ -107,6 +120,7 @@ const searchForm = reactive({
 })
 
 type TrackViewRecord = {
+    bookingId: string
     referenceNo: string
     phone: string
     customerName: string
@@ -115,6 +129,7 @@ type TrackViewRecord = {
     statusLabel: string
     appointmentDate: string
     note: string
+    paymentStatus: 'unpaid' | 'pending' | 'paid' | 'failed' | 'refunded'
     timeline: Array<{
         title: string
         at: string
@@ -207,6 +222,7 @@ const extractAppointmentDate = (note: string | null | undefined) => {
 }
 
 const buildTrackRecord = (item: {
+    id: string
     booking_no: string
     status: string
     delivery_phone?: string | null
@@ -214,10 +230,11 @@ const buildTrackRecord = (item: {
     internal_note?: string | null
     created_at: string
     updated_at: string
-}): TrackViewRecord => {
+}, paymentStatus: TrackViewRecord['paymentStatus']): TrackViewRecord => {
     const statusLabel = statusLabelMap[item.status] || item.status
 
     return {
+        bookingId: item.id,
         referenceNo: item.booking_no,
         phone: item.delivery_phone || searchForm.phone,
         customerName: 'ลูกค้า',
@@ -226,6 +243,7 @@ const buildTrackRecord = (item: {
         statusLabel,
         appointmentDate: extractAppointmentDate(item.delivery_note),
         note: item.internal_note || 'ทีมงานกำลังดำเนินการตามคำขอของคุณ',
+        paymentStatus,
         timeline: [
             {
                 title: 'สร้างคำขอเรียบร้อย',
@@ -239,6 +257,61 @@ const buildTrackRecord = (item: {
             }
         ]
     }
+}
+
+const paymentStatusLabelMap: Record<TrackViewRecord['paymentStatus'], string> = {
+    unpaid: 'ยังไม่ชำระเงิน',
+    pending: 'ชำระแล้ว รอตรวจสอบ',
+    paid: 'ชำระเงินแล้ว',
+    failed: 'การชำระไม่ผ่านการตรวจสอบ',
+    refunded: 'คืนเงินแล้ว'
+}
+
+const paymentBadgeClassMap: Record<TrackViewRecord['paymentStatus'], string> = {
+    unpaid: 'border border-[rgba(190,24,93,0.2)] bg-[rgba(190,24,93,0.12)] text-[#9f1239]',
+    pending: 'border border-[rgba(202,138,4,0.25)] bg-[rgba(202,138,4,0.12)] text-[#854d0e]',
+    paid: 'border border-[rgba(5,150,105,0.24)] bg-[rgba(5,150,105,0.12)] text-[#065f46]',
+    failed: 'border border-[rgba(159,18,57,0.22)] bg-[rgba(159,18,57,0.1)] text-[#9f1239]',
+    refunded: 'border border-[rgba(59,130,246,0.22)] bg-[rgba(59,130,246,0.1)] text-[#1d4ed8]'
+}
+
+const paymentStatusLabel = computed(() => {
+    if (!selectedRecord.value) return ''
+    return paymentStatusLabelMap[selectedRecord.value.paymentStatus]
+})
+
+const paymentBadgeClass = computed(() => {
+    if (!selectedRecord.value) return ''
+    return paymentBadgeClassMap[selectedRecord.value.paymentStatus]
+})
+
+const showUnpaidBadge = computed(() => selectedRecord.value?.paymentStatus === 'unpaid')
+
+const paymentLink = computed(() => {
+    if (!selectedRecord.value) return '/customer/payment'
+
+    return {
+        path: '/customer/payment',
+        query: {
+            id: selectedRecord.value.bookingId,
+            ref: selectedRecord.value.referenceNo,
+            phone: selectedRecord.value.phone,
+            item: selectedRecord.value.itemName
+        }
+    }
+})
+
+const resolvePaymentStatus = async (bookingId: string): Promise<TrackViewRecord['paymentStatus']> => {
+    const payments = await listPayments(bookingId)
+    if (!payments.length) return 'unpaid'
+
+    const latest = payments[0]
+    if (!latest) return 'unpaid'
+    if (latest.status === 'paid') return 'paid'
+    if (latest.status === 'pending') return 'pending'
+    if (latest.status === 'failed') return 'failed'
+    if (latest.status === 'refunded') return 'refunded'
+    return 'unpaid'
 }
 
 const handleSearch = async () => {
@@ -255,7 +328,8 @@ const handleSearch = async () => {
     isSearching.value = true
     try {
         const item = await trackBooking(normalizedRef, normalizedPhone)
-        selectedRecord.value = buildTrackRecord(item)
+        const paymentStatus = await resolvePaymentStatus(item.id)
+        selectedRecord.value = buildTrackRecord(item, paymentStatus)
         searchResult.value = 'found'
     } catch {
         selectedRecord.value = null

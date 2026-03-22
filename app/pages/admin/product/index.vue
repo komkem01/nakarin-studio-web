@@ -42,20 +42,20 @@
                 class="field-input field-dropdown-btn"
                 @click.stop="toggleCategoryMenu"
               >
-                {{ newItem.category || "เลือกหมวดหมู่" }}
+                {{ selectedCategoryName(newItem.categoryId) || "เลือกหมวดหมู่" }}
               </button>
               <ul
                 v-if="isCategoryMenuOpen"
                 class="dropdown dropdown-full menu rounded-xl bg-white shadow-md"
                 @click.stop
               >
-                <li v-for="category in categorySuggestions" :key="category">
+                <li v-for="category in categorySuggestions" :key="category.id">
                   <button
                     type="button"
                     class="dropdown-item"
-                    @click="selectCategory(category)"
+                    @click="selectCategory(category.id)"
                   >
-                    {{ category }}
+                    {{ category.name }}
                   </button>
                 </li>
               </ul>
@@ -81,6 +81,60 @@
               class="field-input"
               placeholder="เช่น 2-3 วัน"
             />
+          </label>
+        </div>
+
+        <div class="mt-3 grid gap-3 md:grid-cols-2">
+          <label class="field-block md:col-span-2">
+            <span class="field-label">รายละเอียดสินค้า</span>
+            <textarea
+              v-model="newItem.description"
+              rows="3"
+              class="field-input resize-none"
+              placeholder="ระบุภาพรวมสินค้าโดยย่อ"
+            ></textarea>
+          </label>
+
+          <label class="field-block">
+            <span class="field-label">เหมาะกับงาน</span>
+            <input
+              v-model="newItem.suitableFor"
+              type="text"
+              class="field-input"
+              placeholder="เช่น งานครอบครัว 30-80 คน"
+            />
+          </label>
+
+          <label class="field-block">
+            <span class="field-label">หน้างาน</span>
+            <input
+              v-model="newItem.onSite"
+              type="text"
+              class="field-input"
+              placeholder="เช่น ส่งงานตรงเวลา + ตรวจความเรียบร้อย"
+            />
+          </label>
+        </div>
+
+        <div class="mt-3 grid gap-3 md:grid-cols-2">
+          <label class="field-block">
+            <span class="field-label">รายการที่ได้รับ</span>
+            <textarea
+              v-model="newItem.receivedItems"
+              rows="4"
+              class="field-input resize-none"
+              placeholder="หนึ่งรายการต่อหนึ่งบรรทัด"
+            ></textarea>
+          </label>
+
+          <label class="field-block">
+            <span class="field-label">หมายเหตุสำหรับลูกค้า</span>
+            <textarea
+              v-model="newItem.note"
+              rows="4"
+              class="field-input resize-none"
+              placeholder="เช่น สินค้าทำมือ อาจแตกต่างเล็กน้อย"
+            ></textarea>
           </label>
         </div>
 
@@ -112,9 +166,6 @@
           </div>
         </div>
 
-        <p v-if="flash" class="mt-3 text-sm font-semibold text-[#0f766e]">
-          {{ flash }}
-        </p>
       </section>
 
       <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -145,11 +196,12 @@
 
             <label class="field-block">
               <span class="field-label">หมวดหมู่</span>
-              <input
-                v-model="entry.draft.category"
-                type="text"
-                class="field-input"
-              />
+              <select v-model="entry.draft.categoryId" class="field-input">
+                <option value="">เลือกหมวดหมู่</option>
+                <option v-for="category in categorySuggestions" :key="category.id" :value="category.id">
+                  {{ category.name }}
+                </option>
+              </select>
             </label>
 
             <div class="grid grid-cols-2 gap-3">
@@ -236,40 +288,37 @@
         </article>
       </section>
 
-      <dialog ref="confirmDeleteDialog" class="modal">
-        <div class="modal-box">
+      <div v-if="isDeleteModalOpen" class="confirm-overlay" @click.self="closeDeleteModal">
+        <div class="confirm-box">
           <h3 class="text-lg font-bold text-[#21423b]">ยืนยันการลบสินค้า</h3>
           <p class="py-3 text-sm text-[#48645d]">
             ต้องการลบสินค้า
             <span class="font-bold text-[#21423b]">{{ pendingDeleteName }}</span>
             ใช่หรือไม่
           </p>
-          <div class="modal-action">
-            <form method="dialog">
-              <button
-                type="submit"
-                class="btn-ghost rounded-xl px-3 py-2 text-xs font-semibold"
-                @click="clearPendingDelete"
-              >
-                ยกเลิก
-              </button>
-            </form>
+          <div class="confirm-action">
+            <button
+              type="button"
+              class="btn-ghost rounded-xl px-3 py-2 text-xs font-semibold"
+              :disabled="isSubmitting"
+              @click="closeDeleteModal"
+            >
+              ยกเลิก
+            </button>
             <button
               type="button"
               class="btn-danger rounded-xl px-3 py-2 text-xs font-semibold"
+              :disabled="isSubmitting"
               @click="confirmDelete"
             >
               ยืนยันลบ
             </button>
           </div>
         </div>
-        <form method="dialog" class="modal-backdrop">
-          <button type="submit" @click="clearPendingDelete">close</button>
-        </form>
-      </dialog>
+      </div>
 
-      <dialog ref="confirmSaveDialog" class="modal">
-        <div class="modal-box">
+      <div v-if="isSaveModalOpen" class="confirm-overlay" @click.self="closeSaveModal">
+        <div class="confirm-box">
           <h3 class="text-lg font-bold text-[#21423b]">
             {{ pendingSaveAction === "edit" ? "ยืนยันการบันทึกการแก้ไข" : "ยืนยันการเพิ่มสินค้า" }}
           </h3>
@@ -280,96 +329,114 @@
                 : `ต้องการเพิ่มสินค้า ${pendingSaveName} ใช่หรือไม่`
             }}
           </p>
-          <div class="modal-action">
-            <form method="dialog">
-              <button
-                type="submit"
-                class="btn-ghost rounded-xl px-3 py-2 text-xs font-semibold"
-                @click="clearPendingSave"
-              >
-                ยกเลิก
-              </button>
-            </form>
+          <div class="confirm-action">
+            <button
+              type="button"
+              class="btn-ghost rounded-xl px-3 py-2 text-xs font-semibold"
+              :disabled="isSubmitting"
+              @click="closeSaveModal"
+            >
+              ยกเลิก
+            </button>
             <button
               type="button"
               class="btn-brand rounded-xl px-3 py-2 text-xs font-semibold"
+              :disabled="isSubmitting"
               @click="confirmSave"
             >
               ยืนยัน
             </button>
           </div>
         </div>
-        <form method="dialog" class="modal-backdrop">
-          <button type="submit" @click="clearPendingSave">close</button>
-        </form>
-      </dialog>
-
-      <div class="toast toast-top toast-end">
-        <div v-for="toast in toasts" :key="toast.id" class="alert" :class="`alert-${toast.type}`">
-          <span>{{ toast.message }}</span>
-        </div>
       </div>
+
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
-import { useAdminMvpStore } from "~/composables/useAdminMvpStore";
 
 definePageMeta({
   layout: "admin",
 });
 
+type ProductApiItem = {
+  id: string;
+  category_id?: string | null;
+  name: string;
+  description?: string | null;
+  suitable_for?: string | null;
+  on_site?: string | null;
+  received_items?: string | null;
+  note?: string | null;
+  price: number;
+  is_active: boolean;
+  is_available: boolean;
+  prep_time: number;
+  sort_order: number;
+};
+
+type CategoryApiItem = {
+  id: string;
+  name: string;
+  description?: string | null;
+  is_active: boolean;
+};
+
 type ProductDraft = {
   name: string;
-  category: string;
+  categoryId: string;
+  description: string;
   price: number;
   leadTime: string;
+  suitableFor: string;
+  onSite: string;
+  receivedItems: string;
+  note: string;
   isActive: boolean;
 };
 
-type ToastType = "success" | "info" | "warning";
+const { request } = useAdminApi();
+const { showToast } = useAdminToast();
 
-type ToastItem = {
-  id: number;
-  type: ToastType;
-  message: string;
-};
-
-const {
-  catalog,
-  categories,
-  updateCatalogItem,
-  createCatalogItem,
-  deleteCatalogItem,
-} = useAdminMvpStore();
-
-const flash = ref("");
+const catalog = ref<ProductDraftWithId[]>([]);
+const categories = ref<CategoryApiItem[]>([]);
 const drafts = reactive<Record<string, ProductDraft>>({});
-const confirmDeleteDialog = ref<HTMLDialogElement | null>(null);
-const confirmSaveDialog = ref<HTMLDialogElement | null>(null);
+const isDeleteModalOpen = ref(false);
+const isSaveModalOpen = ref(false);
 const pendingDeleteId = ref<string | null>(null);
 const pendingDeleteName = ref("");
 const pendingSaveAction = ref<"create" | "edit" | null>(null);
 const pendingSaveName = ref("");
-const toasts = ref<ToastItem[]>([]);
 const openMenuId = ref<string | null>(null);
 const editingProductId = ref<string | null>(null);
 const menuOpenUp = reactive<Record<string, boolean>>({});
 const isCategoryMenuOpen = ref(false);
-let toastSeed = 0;
+const isSubmitting = ref(false);
+
+type ProductDraftWithId = ProductDraft & {
+  id: string;
+};
 
 const newItem = reactive<ProductDraft>({
   name: "",
-  category: "",
+  categoryId: "",
+  description: "",
   price: 0,
   leadTime: "",
+  suitableFor: "",
+  onSite: "",
+  receivedItems: "",
+  note: "",
   isActive: true,
 });
 
-const categorySuggestions = computed(() =>
-  categories.value.map((item) => item.name),
-);
+const categorySuggestions = computed(() => categories.value);
+
+const selectedCategoryName = (categoryId: string) => {
+  if (!categoryId) return "";
+  return categories.value.find((item) => item.id === categoryId)?.name || "";
+};
 
 const catalogEntries = computed(() =>
   catalog.value
@@ -381,33 +448,78 @@ const catalogEntries = computed(() =>
       (
         entry,
       ): entry is {
-        item: (typeof catalog.value)[number];
+        item: ProductDraftWithId;
         draft: ProductDraft;
       } => Boolean(entry.draft),
     ),
 );
 
+const toLeadTimeText = (prepTime: number): string => {
+  if (!Number.isFinite(prepTime) || prepTime <= 0) return "";
+  return `${prepTime} วัน`;
+};
+
+const parseLeadTime = (value: string): number => {
+  const match = String(value || "").match(/\d+/);
+  if (!match) return 0;
+  const parsed = Number(match[0]);
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+};
+
+const mapApiProductToDraft = (item: ProductApiItem): ProductDraftWithId => ({
+  id: item.id,
+  name: item.name,
+  categoryId: item.category_id || "",
+  description: item.description || "",
+  price: Number(item.price) || 0,
+  leadTime: toLeadTimeText(item.prep_time),
+  suitableFor: item.suitable_for || "",
+  onSite: item.on_site || "",
+  receivedItems: item.received_items || "",
+  note: item.note || "",
+  isActive: Boolean(item.is_active),
+});
+
+const loadProducts = async () => {
+  try {
+    const items = await request<ProductApiItem[]>("/api/v1/system/products", {
+      method: "GET",
+    });
+    catalog.value = (items || []).map(mapApiProductToDraft);
+  } catch {
+    catalog.value = [];
+    showToast("warning", "โหลดข้อมูลสินค้าไม่สำเร็จ");
+  }
+};
+
+const loadCategories = async () => {
+  try {
+    categories.value = await request<CategoryApiItem[]>("/api/v1/system/product-categories", {
+      method: "GET",
+      query: { is_active: true },
+    });
+  } catch {
+    categories.value = [];
+    showToast("warning", "โหลดข้อมูลหมวดหมู่ไม่สำเร็จ");
+  }
+};
+
 const resetNewItem = () => {
   newItem.name = "";
-  newItem.category = categorySuggestions.value[0] ?? "";
+  newItem.categoryId = categorySuggestions.value[0]?.id ?? "";
+  newItem.description = "";
   newItem.price = 0;
   newItem.leadTime = "";
+  newItem.suitableFor = "";
+  newItem.onSite = "";
+  newItem.receivedItems = "";
+  newItem.note = "";
   newItem.isActive = true;
 };
 
 const cancelEdit = () => {
   editingProductId.value = null;
   resetNewItem();
-};
-
-const showToast = (type: ToastType, message: string) => {
-  const id = ++toastSeed;
-  flash.value = message;
-  toasts.value = [...toasts.value, { id, type, message }];
-
-  window.setTimeout(() => {
-    toasts.value = toasts.value.filter((toast) => toast.id !== id);
-  }, 2600);
 };
 
 const clearPendingDelete = () => {
@@ -441,8 +553,8 @@ const toggleCategoryMenu = () => {
   isCategoryMenuOpen.value = !isCategoryMenuOpen.value;
 };
 
-const selectCategory = (category: string) => {
-  newItem.category = category;
+const selectCategory = (categoryId: string) => {
+  newItem.categoryId = categoryId;
   isCategoryMenuOpen.value = false;
 };
 
@@ -465,9 +577,14 @@ watch(
     for (const item of items) {
       drafts[item.id] = {
         name: item.name,
-        category: item.category,
+        categoryId: item.categoryId,
+        description: item.description,
         price: item.price,
         leadTime: item.leadTime,
+        suitableFor: item.suitableFor,
+        onSite: item.onSite,
+        receivedItems: item.receivedItems,
+        note: item.note,
         isActive: item.isActive,
       };
     }
@@ -479,66 +596,82 @@ watch(
       }
     }
 
-    if (!newItem.category) {
-      newItem.category = categorySuggestions.value[0] ?? "";
+    if (!newItem.categoryId) {
+      newItem.categoryId = categorySuggestions.value[0]?.id ?? "";
     }
   },
   { immediate: true, deep: true },
 );
 
 const requestCreateOrUpdate = () => {
+  if (isSubmitting.value) return;
+
   if (!newItem.name.trim()) {
     showToast("warning", "กรุณาระบุชื่อสินค้า");
     return;
   }
 
-  if (!newItem.category.trim()) {
+  if (!newItem.categoryId) {
     showToast("warning", "กรุณาระบุหมวดหมู่สินค้า");
     return;
   }
 
   pendingSaveAction.value = editingProductId.value ? "edit" : "create";
   pendingSaveName.value = newItem.name.trim();
-  confirmSaveDialog.value?.showModal();
+  isSaveModalOpen.value = true;
 };
 
-const confirmSave = () => {
+const confirmSave = async () => {
+  if (isSubmitting.value) return;
+
   const action = pendingSaveAction.value;
   if (!action) return;
 
   clearPendingSave();
-  confirmSaveDialog.value?.close();
+  isSaveModalOpen.value = false;
 
-  if (action === "edit" && editingProductId.value) {
-    const success = updateCatalogItem(editingProductId.value, {
-      name: newItem.name,
-      category: newItem.category,
-      price: Number.isFinite(newItem.price) ? Math.max(0, newItem.price) : 0,
-      leadTime: newItem.leadTime,
-      isActive: newItem.isActive,
-    });
+  const payload = {
+    category_id: newItem.categoryId,
+    name: newItem.name.trim(),
+    description: newItem.description.trim() || null,
+    suitable_for: newItem.suitableFor.trim() || null,
+    on_site: newItem.onSite.trim() || null,
+    received_items: newItem.receivedItems.trim() || null,
+    note: newItem.note.trim() || null,
+    price: Number.isFinite(newItem.price) ? Math.max(0, newItem.price) : 0,
+    is_active: newItem.isActive,
+    is_available: newItem.isActive,
+    prep_time: parseLeadTime(newItem.leadTime),
+    sort_order: 0,
+  };
 
-    showToast(
-      success ? "success" : "info",
-      success ? "บันทึกการแก้ไขสินค้าเรียบร้อยแล้ว" : "ไม่พบข้อมูลสินค้าที่ต้องการแก้ไข",
-    );
+  try {
+    isSubmitting.value = true;
 
-    if (success) {
+    if (action === "edit" && editingProductId.value) {
+      await request<ProductApiItem>(`/api/v1/system/products/${editingProductId.value}`, {
+        method: "PATCH",
+        body: payload,
+      });
+
+      showToast("success", "บันทึกการแก้ไขสินค้าเรียบร้อยแล้ว");
       cancelEdit();
+    } else {
+      await request<null>("/api/v1/system/products", {
+        method: "POST",
+        body: payload,
+      });
+
+      showToast("success", `เพิ่มสินค้า ${payload.name} เรียบร้อยแล้ว`);
+      resetNewItem();
     }
-    return;
+
+    await loadProducts();
+  } catch {
+    showToast("warning", "ไม่สามารถบันทึกข้อมูลสินค้าได้");
+  } finally {
+    isSubmitting.value = false;
   }
-
-  const created = createCatalogItem({
-    name: newItem.name,
-    category: newItem.category,
-    price: newItem.price,
-    leadTime: newItem.leadTime,
-    isActive: newItem.isActive,
-  });
-
-  showToast("success", `เพิ่มสินค้า ${created.name} เรียบร้อยแล้ว`);
-  resetNewItem();
 };
 
 const startEdit = (id: string) => {
@@ -550,9 +683,14 @@ const startEdit = (id: string) => {
 
   editingProductId.value = id;
   newItem.name = source.name;
-  newItem.category = source.category;
+  newItem.categoryId = source.categoryId;
+  newItem.description = source.description;
   newItem.price = source.price;
   newItem.leadTime = source.leadTime;
+  newItem.suitableFor = source.suitableFor;
+  newItem.onSite = source.onSite;
+  newItem.receivedItems = source.receivedItems;
+  newItem.note = source.note;
   newItem.isActive = source.isActive;
 
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -567,26 +705,47 @@ const handleDelete = (id: string) => {
 
   pendingDeleteId.value = current.id;
   pendingDeleteName.value = current.name;
-  confirmDeleteDialog.value?.showModal();
+  isDeleteModalOpen.value = true;
 };
 
-const confirmDelete = () => {
+const confirmDelete = async () => {
+  if (isSubmitting.value) return;
+
   const targetId = pendingDeleteId.value;
   const targetName = pendingDeleteName.value;
   if (!targetId) {
     return;
   }
 
-  const deleted = deleteCatalogItem(targetId);
-  clearPendingDelete();
-  confirmDeleteDialog.value?.close();
-  showToast(
-    deleted ? "success" : "info",
-    deleted
-      ? `ลบสินค้า ${targetName} เรียบร้อยแล้ว`
-      : "ไม่สามารถลบสินค้าได้",
-  );
+  try {
+    isSubmitting.value = true;
+    await request<null>(`/api/v1/system/products/${targetId}`, {
+      method: "DELETE",
+    });
+    showToast("success", `ลบสินค้า ${targetName} เรียบร้อยแล้ว`);
+    await loadProducts();
+  } catch {
+    showToast("warning", "ไม่สามารถลบสินค้าได้");
+  } finally {
+    clearPendingDelete();
+    isDeleteModalOpen.value = false;
+    isSubmitting.value = false;
+  }
 };
+
+const closeDeleteModal = () => {
+  if (isSubmitting.value) return;
+  clearPendingDelete();
+  isDeleteModalOpen.value = false;
+};
+
+const closeSaveModal = () => {
+  if (isSubmitting.value) return;
+  clearPendingSave();
+  isSaveModalOpen.value = false;
+};
+
+await Promise.all([loadProducts(), loadCategories()]);
 </script>
 
 <style scoped>
@@ -744,81 +903,31 @@ const confirmDelete = () => {
   background: rgba(225, 29, 72, 0.1);
 }
 
-.modal {
-  border: none;
-  padding: 0;
-  background: transparent;
-}
-
-.modal::backdrop {
-  background: rgba(15, 23, 42, 0.42);
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.36);
   backdrop-filter: blur(1px);
 }
 
-.modal-box {
+.confirm-box {
   width: min(92vw, 26rem);
   border-radius: 1rem;
   border: 1px solid rgba(6, 95, 70, 0.16);
   background: #fff;
   padding: 1rem;
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.2);
 }
 
-.modal-action {
+.confirm-action {
   display: flex;
   justify-content: flex-end;
   gap: 0.5rem;
 }
 
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-}
-
-.modal-backdrop > button {
-  display: none;
-}
-
-.toast {
-  position: fixed;
-  z-index: 60;
-  display: grid;
-  gap: 0.55rem;
-}
-
-.toast-top {
-  top: 1rem;
-}
-
-.toast-end {
-  right: 1rem;
-}
-
-.alert {
-  min-width: 14rem;
-  max-width: min(86vw, 22rem);
-  border-radius: 0.85rem;
-  border: 1px solid transparent;
-  padding: 0.65rem 0.85rem;
-  font-size: 0.84rem;
-  font-weight: 600;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
-}
-
-.alert-info {
-  color: #0f3d35;
-  border-color: rgba(13, 148, 136, 0.28);
-  background: rgba(204, 251, 241, 0.96);
-}
-
-.alert-success {
-  color: #064e3b;
-  border-color: rgba(22, 163, 74, 0.28);
-  background: rgba(220, 252, 231, 0.96);
-}
-
-.alert-warning {
-  color: #7c2d12;
-  border-color: rgba(234, 88, 12, 0.3);
-  background: rgba(255, 237, 213, 0.96);
-}
 </style>

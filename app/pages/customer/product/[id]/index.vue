@@ -38,6 +38,30 @@
 
                     <p class="text-sm leading-relaxed text-[#4f6660]">{{ productView.description }}</p>
 
+                    <div class="mt-6 grid gap-3 sm:grid-cols-2">
+                        <div class="info-card rounded-xl p-4">
+                            <p class="text-xs uppercase tracking-[0.16em] text-[#5a7770]">เหมาะกับงาน</p>
+                            <p class="mt-1 text-sm font-semibold text-[#21423b]">{{ productView.suitableFor }}</p>
+                        </div>
+                        <div class="info-card rounded-xl p-4">
+                            <p class="text-xs uppercase tracking-[0.16em] text-[#5a7770]">หน้างาน</p>
+                            <p class="mt-1 text-sm font-semibold text-[#21423b]">{{ productView.onSite }}</p>
+                        </div>
+                    </div>
+
+                    <div class="mt-6">
+                        <p class="text-sm font-semibold text-[#36524b]">รายละเอียดสินค้า</p>
+                        <div class="mt-3 space-y-2">
+                            <p
+                                v-for="(line, lineIndex) in productView.detailLines"
+                                :key="`detail-line-${lineIndex}`"
+                                class="text-sm leading-relaxed text-[#4f6660]"
+                            >
+                                {{ line }}
+                            </p>
+                        </div>
+                    </div>
+
                     <div class="mt-6">
                         <p class="text-sm font-semibold text-[#36524b]">รายการที่ได้รับ</p>
                         <ul class="mt-3 space-y-2">
@@ -51,10 +75,6 @@
                         </ul>
                     </div>
 
-                    <div class="mt-6 rounded-xl border border-[rgba(6,95,70,0.14)] bg-white/80 p-4">
-                        <p class="text-xs uppercase tracking-[0.16em] text-[#5a7770]">หมายเหตุ</p>
-                        <p class="mt-1 text-sm font-medium text-[#21423b]">{{ productView.note }}</p>
-                    </div>
                 </article>
 
                 <form class="form-card rounded-2xl p-5 md:p-6" @submit.prevent="handleSubmit">
@@ -216,11 +236,13 @@ type ProductView = {
     name: string
     category: string
     description: string
+    suitableFor: string
+    onSite: string
+    detailLines: string[]
     price: string
     unitPrice: number
     leadTime: string
     includes: string[]
-    note: string
 }
 
 const productView = ref<ProductView | null>(null)
@@ -338,6 +360,20 @@ const formatPrice = (price: number) => price.toLocaleString('th-TH', {
     maximumFractionDigits: 0
 })
 
+const toLineItems = (value?: string | null): string[] => {
+    if (!value) return []
+    return value
+        .split('\n')
+        .map((item) => item.trim())
+        .filter(Boolean)
+}
+
+const toDetailLines = (value?: string | null): string[] => {
+    const lines = toLineItems(value)
+    if (lines.length) return lines
+    return ['ไม่มีรายละเอียดเพิ่มเติม']
+}
+
 const loadProduct = async () => {
     if (!productId.value) {
         productView.value = null
@@ -356,11 +392,13 @@ const loadProduct = async () => {
             name: item.name,
             category: 'สินค้า',
             description: item.description || 'ไม่มีรายละเอียดสินค้า',
+            suitableFor: item.suitable_for || '-',
+            onSite: item.on_site || '-',
+            detailLines: toDetailLines(item.note || item.description || ''),
             price: formatPrice(item.price),
             unitPrice: item.price,
             leadTime: item.prep_time > 0 ? `${item.prep_time} วัน` : '-',
-            includes: [],
-            note: 'รายละเอียดเพิ่มเติมโปรดสอบถามทีมงาน'
+            includes: toLineItems(item.received_items)
         }
     } catch {
         productView.value = null
@@ -524,6 +562,11 @@ const handleSubmit = async () => {
     box-shadow: 0 12px 28px rgba(6, 95, 70, 0.08);
 }
 
+.info-card {
+    background: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(6, 95, 70, 0.14);
+}
+
 .dot {
     width: 7px;
     height: 7px;
@@ -595,5 +638,24 @@ const handleSubmit = async () => {
 
 .field:focus {
     border-color: var(--brand);
+}
+
+select.field {
+    appearance: none;
+    background-image:
+        linear-gradient(45deg, transparent 50%, #4f6660 50%),
+        linear-gradient(135deg, #4f6660 50%, transparent 50%);
+    background-position:
+        calc(100% - 16px) calc(50% - 3px),
+        calc(100% - 11px) calc(50% - 3px);
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+    padding-right: 2.1rem;
+}
+
+select.field:disabled {
+    color: #8aa19b;
+    background-color: rgba(234, 242, 239, 0.9);
+    cursor: not-allowed;
 }
 </style>

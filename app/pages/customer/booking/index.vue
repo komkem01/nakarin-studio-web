@@ -43,7 +43,7 @@
                         <div class="mt-4 flex items-center justify-between">
                             <p class="text-xs text-[#5a7770]">ดูตัวอย่างงานและรายละเอียดเพิ่มเติมได้</p>
                             <div class="flex items-center gap-3">
-                                <NuxtLink :to="`/customer/booking/${item.slug}`" class="link-brand text-sm font-semibold">
+                                <NuxtLink :to="`/customer/booking/${item.id}`" class="link-brand text-sm font-semibold">
                                     ดูรายละเอียด
                                 </NuxtLink>
                                 <button
@@ -215,7 +215,6 @@ const {
 
 type PackageCard = {
     id: string
-    slug: string
     type: string
     name: string
     detail: string
@@ -223,7 +222,6 @@ type PackageCard = {
     unitPrice: number
 }
 
-const packageSlugs = ['mongkol-standard', 'phaya-naga', 'executive-welcome']
 const packages = ref<PackageCard[]>([])
 const selectedPackageId = ref('')
 const isPackageLoading = ref(true)
@@ -345,10 +343,9 @@ const loadPackages = async () => {
         packages.value = items
             .sort((a, b) => a.sort_order - b.sort_order)
             .slice(0, 3)
-            .map((item, index) => ({
+            .map((item) => ({
                 id: item.id,
-                slug: packageSlugs[index] || item.id,
-                type: 'แพ็กเกจงานบายศรี',
+                type: item.suitable_for || 'แพ็กเกจงานบายศรี',
                 name: item.name,
                 detail: item.description || 'ไม่มีรายละเอียดเพิ่มเติม',
                 price: formatPrice(item.price),
@@ -582,5 +579,24 @@ const handleSubmit = async () => {
 
 .field:focus {
     border-color: var(--brand);
+}
+
+select.field {
+    appearance: none;
+    background-image:
+        linear-gradient(45deg, transparent 50%, #4f6660 50%),
+        linear-gradient(135deg, #4f6660 50%, transparent 50%);
+    background-position:
+        calc(100% - 16px) calc(50% - 3px),
+        calc(100% - 11px) calc(50% - 3px);
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+    padding-right: 2.1rem;
+}
+
+select.field:disabled {
+    color: #8aa19b;
+    background-color: rgba(234, 242, 239, 0.9);
+    cursor: not-allowed;
 }
 </style>

@@ -17,7 +17,15 @@
                 </div>
             </div>
 
-            <div class="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+            <div v-if="isPackageLoading" class="rounded-2xl border border-[rgba(6,95,70,0.14)] bg-white/75 p-6 text-sm text-[#4f6660]">
+                กำลังโหลดรายละเอียดแพ็กเกจจากระบบ...
+            </div>
+
+            <div v-else-if="packageLoadError" class="rounded-2xl border border-[#f3c6c6] bg-[#fff6f6] p-6 text-sm text-[#9b2c2c]">
+                {{ packageLoadError }}
+            </div>
+
+            <div v-else class="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
                 <article class="package-card rounded-2xl p-5 md:p-6">
                     <div class="mb-5 flex flex-wrap items-center gap-3">
                         <p class="badge-brand rounded-full px-3 py-1 text-sm font-semibold">{{ selectedPackage.price }}</p>
@@ -38,12 +46,26 @@
                     </div>
 
                     <div class="mt-6">
+                        <p class="text-sm font-semibold text-[#36524b]">รายละเอียดสินค้า</p>
+                        <div class="mt-3 space-y-2">
+                            <p
+                                v-for="(line, lineIndex) in selectedPackage.descriptionLines"
+                                :key="`description-${lineIndex}`"
+                                class="text-sm leading-relaxed text-[#4f6660]"
+                            >
+                                {{ line }}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="mt-6">
                         <p class="text-sm font-semibold text-[#36524b]">สิ่งที่รวมในแพ็กเกจ</p>
                         <ul class="mt-3 space-y-2">
                             <li v-for="item in selectedPackage.includes" :key="item" class="flex items-start gap-2 text-sm text-[#4f6660]">
                                 <span class="dot mt-1.5"></span>
                                 <span>{{ item }}</span>
                             </li>
+                            <li v-if="!selectedPackage.includes.length" class="text-sm text-[#4f6660]">ไม่มีรายการเพิ่มเติม</li>
                         </ul>
                     </div>
                 </article>
@@ -193,6 +215,7 @@ import { usePublicBookingApi } from '~/composables/usePublicBookingApi'
 const route = useRoute()
 const {
     createAggregateBooking,
+    getProductById,
     listGenders,
     listPrefixes,
     listProvinces,
@@ -201,52 +224,35 @@ const {
     listZipcodes
 } = usePublicBookingApi()
 
-const packageMap: Record<string, {
+type PackageDetail = {
+    id: string
     type: string
     name: string
     detail: string
+    descriptionLines: string[]
     price: string
+    unitPrice: number
     prepTime: string
     suitableFor: string
     onSite: string
     includes: string[]
-}> = {
-    'mongkol-standard': {
-        type: 'งานพิธีครอบครัว',
-        name: 'บายศรีมงคลมาตรฐาน',
-        detail: 'แพ็กเกจเริ่มต้นที่ได้งานสวยครบองค์ประกอบ เหมาะกับงานบวช งานขึ้นบ้านใหม่ และพิธีทั่วไปที่ต้องการความเรียบร้อยดูดี',
-        price: 'เริ่มต้น ฿4,500',
-        prepTime: '3-5 วัน',
-        suitableFor: 'พิธีครอบครัว 30-80 คน',
-        onSite: 'ส่งงานตรงเวลา + ตรวจความเรียบร้อย',
-        includes: ['ชุดบายศรีหลัก 1 ชุด', 'จัดดอกไม้และวัสดุตามธีมงาน', 'คำแนะนำการจัดวางหน้างาน']
-    },
-    'phaya-naga': {
-        type: 'งานพิธีขนาดใหญ่',
-        name: 'บายศรีพญานาค',
-        detail: 'เน้นมิติและความอลังการของลายพญานาค เหมาะกับพิธีที่ต้องการจุดเด่นบนเวทีและภาพรวมที่ดูสง่างาม',
-        price: 'เริ่มต้น ฿7,900',
-        prepTime: '5-7 วัน',
-        suitableFor: 'พิธีใหญ่ 80-200 คน',
-        onSite: 'ติดตั้งหน้างานและเช็กจุดจัดแสดง',
-        includes: ['ชุดบายศรีพญานาค 1 ชุด', 'ออกแบบโทนสีให้เข้าธีมงาน', 'ทีมงานเข้าติดตั้งก่อนเวลาเริ่มงาน']
-    },
-    'executive-welcome': {
-        type: 'งานองค์กร',
-        name: 'บายศรีต้อนรับแขกผู้ใหญ่',
-        detail: 'รูปแบบเรียบหรู ภูมิฐาน ปรับสัดส่วนตามพื้นที่จริง เหมาะกับงานเปิดตัว งานต้อนรับผู้บริหาร และพิธีการองค์กร',
-        price: 'เริ่มต้น ฿5,500',
-        prepTime: '3-5 วัน',
-        suitableFor: 'งานองค์กรและพิธีทางการ',
-        onSite: 'จัดวางตาม flow งานและภาพรวมเวที',
-        includes: ['ชุดบายศรีหลัก 1 ชุด', 'ปรับขนาดตามพื้นที่จัดงาน', 'ให้คำแนะนำตำแหน่งจัดวางเพื่อภาพถ่าย']
-    }
 }
 
-const selectedPackage = computed(() => {
-    const key = String(route.params.id || '')
-    return packageMap[key] || packageMap['mongkol-standard']
+const selectedPackage = ref<PackageDetail>({
+    id: '',
+    type: 'แพ็กเกจงานบายศรี',
+    name: 'รายละเอียดแพ็กเกจ',
+    detail: 'ไม่มีรายละเอียดเพิ่มเติม',
+    descriptionLines: ['ไม่มีรายละเอียดเพิ่มเติม'],
+    price: 'เริ่มต้น ฿0',
+    unitPrice: 0,
+    prepTime: '-',
+    suitableFor: '-',
+    onSite: '-',
+    includes: []
 })
+const isPackageLoading = ref(true)
+const packageLoadError = ref('')
 
 const bookingForm = reactive({
     genderId: '',
@@ -390,28 +396,71 @@ watch(
 )
 
 onMounted(async () => {
+    await loadPackage()
     await loadGenders()
     await loadPrefixes()
     await loadProvinces()
 })
 
-const parsePrice = (value: string): number => {
-    const onlyNumber = value.replace(/[^\d.]/g, '')
-    const parsed = Number(onlyNumber)
-    if (!Number.isFinite(parsed)) return 0
-    return parsed
+const formatPrice = (price: number) => {
+    return `เริ่มต้น ${price.toLocaleString('th-TH', { style: 'currency', currency: 'THB', maximumFractionDigits: 0 })}`
+}
+
+const toLineItems = (value?: string | null): string[] => {
+    if (!value) return []
+    return value
+        .split('\n')
+        .map((item) => item.trim())
+        .filter(Boolean)
+}
+
+const toDetailLines = (value?: string | null): string[] => {
+    const lines = toLineItems(value)
+    if (lines.length) return lines
+    return ['ไม่มีรายละเอียดเพิ่มเติม']
+}
+
+const loadPackage = async () => {
+    isPackageLoading.value = true
+    packageLoadError.value = ''
+
+    try {
+        const id = String(route.params.id || '')
+        if (!id) throw new Error('missing-id')
+
+        const item = await getProductById(id)
+        selectedPackage.value = {
+            id: item.id,
+            type: item.suitable_for || 'แพ็กเกจงานบายศรี',
+            name: item.name,
+            detail: item.description || 'ไม่มีรายละเอียดเพิ่มเติม',
+            descriptionLines: toDetailLines(item.note || item.description || ''),
+            price: formatPrice(item.price),
+            unitPrice: item.price,
+            prepTime: item.prep_time > 0 ? `${item.prep_time} วัน` : '-',
+            suitableFor: item.suitable_for || '-',
+            onSite: item.on_site || '-',
+            includes: toLineItems(item.received_items)
+        }
+    } catch {
+        packageLoadError.value = 'ไม่สามารถโหลดรายละเอียดแพ็กเกจจากระบบได้ในขณะนี้'
+    } finally {
+        isPackageLoading.value = false
+    }
 }
 
 const handleSubmit = async () => {
     if (isSubmitting.value) return
+    if (!selectedPackage.value.id) {
+        submitError.value = 'ไม่พบข้อมูลแพ็กเกจจริง ไม่สามารถส่งคำขอได้'
+        return
+    }
 
     const referenceNo = generateReferenceNo()
     const phone = normalizePhone(bookingForm.phone)
     const firstName = bookingForm.firstName.trim() || 'ลูกค้า'
     const lastName = bookingForm.lastName.trim() || ''
-
-    const routeKey = String(route.params.id || 'mongkol-standard')
-    const unitPrice = parsePrice(selectedPackage.value.price)
+    const unitPrice = selectedPackage.value.unitPrice
 
     const profileNote = [
         selectedGenderName.value ? `เพศ: ${selectedGenderName.value}` : '',
@@ -455,7 +504,7 @@ const handleSubmit = async () => {
             },
             items: [
                 {
-                    product_id: `package-${routeKey}`,
+                    product_id: selectedPackage.value.id,
                     product_name: selectedPackage.value.name,
                     unit_price_at_booking: unitPrice,
                     quantity: 1,
@@ -585,5 +634,24 @@ const handleSubmit = async () => {
 
 .field:focus {
     border-color: var(--brand);
+}
+
+select.field {
+    appearance: none;
+    background-image:
+        linear-gradient(45deg, transparent 50%, #4f6660 50%),
+        linear-gradient(135deg, #4f6660 50%, transparent 50%);
+    background-position:
+        calc(100% - 16px) calc(50% - 3px),
+        calc(100% - 11px) calc(50% - 3px);
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+    padding-right: 2.1rem;
+}
+
+select.field:disabled {
+    color: #8aa19b;
+    background-color: rgba(234, 242, 239, 0.9);
+    cursor: not-allowed;
 }
 </style>

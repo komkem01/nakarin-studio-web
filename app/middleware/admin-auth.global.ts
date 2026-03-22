@@ -1,14 +1,15 @@
-export default defineNuxtRouteMiddleware((to) => {
-  const adminSession = useCookie<string | null>('admin_session')
+export default defineNuxtRouteMiddleware(async (to) => {
+  const { ensureAdminAuth } = useAdminApi()
 
   const isAdminRoute = to.path.startsWith('/admin')
   const isAdminLoginRoute = to.path === '/manage/login'
+  const isAuthenticated = await ensureAdminAuth()
 
-  if (isAdminRoute && !adminSession.value) {
+  if (isAdminRoute && !isAuthenticated) {
     return navigateTo('/manage/login')
   }
 
-  if (isAdminLoginRoute && adminSession.value) {
+  if (isAdminLoginRoute && isAuthenticated) {
     return navigateTo('/admin/dashboard')
   }
 })

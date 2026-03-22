@@ -1,5 +1,15 @@
 <template>
   <div class="min-h-screen bg-[#f8f5f0] flex items-center justify-center p-4 selection:bg-emerald-200">
+    <div
+      v-if="toast.visible"
+      class="fixed right-4 top-4 z-[100] min-w-[280px] max-w-[360px] rounded-xl border px-4 py-3 text-sm shadow-xl"
+      :class="toast.type === 'success'
+        ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
+        : 'border-red-300 bg-red-50 text-red-900'"
+    >
+      {{ toast.message }}
+    </div>
+
     <div class="fixed top-0 left-0 w-full h-full overflow-hidden pointer-events-none opacity-20">
       <div class="absolute top-[-10%] left-[-10%] w-96 h-96 bg-emerald-800 rounded-full blur-[120px]"></div>
       <div class="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-amber-600 rounded-full blur-[120px]"></div>
@@ -111,6 +121,10 @@
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
               </template>
             </button>
+
+            <p v-if="submitError" class="text-sm text-red-600 text-center">
+              {{ submitError }}
+            </p>
           </form>
 
           <div class="mt-12 text-center">
@@ -125,7 +139,21 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onUnmounted } from 'vue'
+
+type LoginSuccessPayload = {
+  access_token: string
+  refresh_token: string
+  admin_id: string
+  username: string
+  role: string
+}
+
+type ApiResponse<T> = {
+  code: string
+  message: string
+  data: T
+}
 
 const authForm = reactive({
   username: '',
@@ -134,23 +162,83 @@ const authForm = reactive({
 
 const isPasswordVisible = ref(false)
 const isSubmitting = ref(false)
+const submitError = ref('')
 const currentYear = computed(() => new Date().getFullYear())
+const config = useRuntimeConfig()
+const apiPrefix = '/api/v1'
+const baseURL = String(config.public.apiBase || '').replace(/\/+$/, '')
+const loginPath = baseURL.endsWith(apiPrefix) ? '/admins/login' : '/api/v1/admins/login'
+
+const toast = reactive({
+  visible: false,
+  type: 'success' as 'success' | 'error',
+  message: ''
+})
+let toastTimer: ReturnType<typeof setTimeout> | null = null
+
+const showToast = (message: string, type: 'success' | 'error', duration = 2200) => {
+  if (toastTimer) clearTimeout(toastTimer)
+  toast.visible = true
+  toast.type = type
+  toast.message = message
+
+  toastTimer = setTimeout(() => {
+    toast.visible = false
+  }, duration)
+}
+
+onUnmounted(() => {
+  if (toastTimer) clearTimeout(toastTimer)
+})
+
 const adminSession = useCookie<string | null>('admin_session', {
   sameSite: 'lax',
   secure: !import.meta.dev
+})
+const adminAccessToken = useCookie<string | null>('admin_access_token', {
+  sameSite: 'lax',
+  secure: !import.meta.dev,
+  maxAge: 2 * 60 * 60
+})
+const adminRefreshToken = useCookie<string | null>('admin_refresh_token', {
+  sameSite: 'lax',
+  secure: !import.meta.dev,
+  maxAge: 30 * 24 * 60 * 60
 })
 
 const handleLogin = async () => {
   if (isSubmitting.value) return
 
   isSubmitting.value = true
+  submitError.value = ''
 
   try {
-    await new Promise(resolve => setTimeout(resolve, 800))
+    const response = await $fetch<ApiResponse<LoginSuccessPayload>>(loginPath, {
+      method: 'POST',
+      baseURL,
+      body: {
+        username: authForm.username.trim(),
+        password: authForm.password
+      }
+    })
 
-    // TODO: replace with real API authentication and role validation
+    const payload = response.data
+    if (!payload?.access_token || !payload?.refresh_token) {
+      throw new Error('invalid-login-response')
+    }
+
+    adminAccessToken.value = payload.access_token
+    adminRefreshToken.value = payload.refresh_token
     adminSession.value = 'active'
+    showToast('เข้าสู่ระบบสำเร็จ', 'success', 900)
+    await new Promise((resolve) => setTimeout(resolve, 300))
     await navigateTo('/admin/dashboard')
+  } catch {
+    adminAccessToken.value = null
+    adminRefreshToken.value = null
+    adminSession.value = null
+    submitError.value = 'เข้าสู่ระบบไม่สำเร็จ กรุณาตรวจสอบชื่อผู้ใช้และรหัสผ่าน'
+    showToast('เข้าสู่ระบบไม่สำเร็จ กรุณาตรวจสอบชื่อผู้ใช้หรือรหัสผ่าน', 'error')
   } finally {
     isSubmitting.value = false
   }

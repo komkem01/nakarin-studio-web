@@ -39,6 +39,9 @@
               <NuxtLink to="/admin/booking" class="nav-link" :class="isActive('/admin/booking') ? 'active' : ''">
                 รายการสั่งจองสินค้า
               </NuxtLink>
+              <NuxtLink to="/admin/payment/pending" class="nav-link" :class="isActive('/admin/payment/pending') ? 'active' : ''">
+                คิวตรวจสอบการชำระ
+              </NuxtLink>
             </div>
           </div>
         </section>
@@ -79,7 +82,7 @@
                 <path d="M4 20a8 8 0 0 1 16 0" />
               </svg>
             </button>
-            <button type="button" class="logout-btn rounded-lg px-3 py-2 text-sm font-semibold" @click="handleLogout">
+            <button type="button" class="logout-btn rounded-lg px-3 py-2 text-sm font-semibold" @click="openLogoutModal">
               ออกจากระบบ
             </button>
           </div>
@@ -91,6 +94,7 @@
           <NuxtLink to="/admin/product/category" class="mobile-link" @click="mobileOpen = false">รายการหมวดหมู่สินค้า</NuxtLink>
           <NuxtLink to="/admin/order" class="mobile-link" @click="mobileOpen = false">รายการคำสั่งซื้อ</NuxtLink>
           <NuxtLink to="/admin/booking" class="mobile-link" @click="mobileOpen = false">รายการสั่งจองสินค้า</NuxtLink>
+          <NuxtLink to="/admin/payment/pending" class="mobile-link" @click="mobileOpen = false">คิวตรวจสอบการชำระ</NuxtLink>
           <NuxtLink to="/admin/schedule" class="mobile-link" @click="mobileOpen = false">รายการตารางเวลา</NuxtLink>
         </div>
       </header>
@@ -98,6 +102,44 @@
       <main class="min-w-0 flex-1 overflow-y-auto p-4 md:p-6">
         <slot />
       </main>
+
+      <div class="admin-toast-stack" aria-live="polite" aria-atomic="true">
+        <div
+          v-for="toast in toasts"
+          :key="toast.id"
+          class="admin-toast"
+          :class="[`admin-toast-${toast.type}`, { 'is-visible': toast.visible }]"
+          role="status"
+          @click="hideToast(toast.id)"
+        >
+          {{ toast.message }}
+        </div>
+      </div>
+
+      <div v-if="isLogoutModalOpen" class="confirm-overlay" @click.self="closeLogoutModal">
+        <div class="confirm-box">
+          <h3 class="text-lg font-bold text-[#21423b]">ยืนยันการออกจากระบบ</h3>
+          <p class="py-3 text-sm text-[#48645d]">ต้องการออกจากระบบตอนนี้ใช่หรือไม่</p>
+          <div class="confirm-action">
+            <button
+              type="button"
+              class="btn-ghost rounded-xl px-3 py-2 text-xs font-semibold"
+              :disabled="isLoggingOut"
+              @click="closeLogoutModal"
+            >
+              ยกเลิก
+            </button>
+            <button
+              type="button"
+              class="btn-primary rounded-xl px-3 py-2 text-xs font-semibold"
+              :disabled="isLoggingOut"
+              @click="confirmLogout"
+            >
+              {{ isLoggingOut ? 'กำลังออกจากระบบ...' : 'ยืนยันออกจากระบบ' }}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -108,7 +150,12 @@ import { ref, watch } from 'vue'
 const route = useRoute()
 const mobileOpen = ref(false)
 const adminSession = useCookie<string | null>('admin_session')
+const adminAccessToken = useCookie<string | null>('admin_access_token')
+const adminRefreshToken = useCookie<string | null>('admin_refresh_token')
+const { toasts, hideToast } = useAdminToast()
 const openedSection = ref<'product' | 'order' | 'schedule' | ''>('')
+const isLogoutModalOpen = ref(false)
+const isLoggingOut = ref(false)
 
 const isActive = (path: string) => route.path.startsWith(path)
 
@@ -122,14 +169,28 @@ watch(
     }
 
     if (route.path.startsWith('/admin/product')) openedSection.value = 'product'
-    if (route.path.startsWith('/admin/order') || route.path.startsWith('/admin/booking')) openedSection.value = 'order'
+    if (route.path.startsWith('/admin/order') || route.path.startsWith('/admin/booking') || route.path.startsWith('/admin/payment')) openedSection.value = 'order'
     if (route.path.startsWith('/admin/schedule')) openedSection.value = 'schedule'
   },
   { immediate: true }
 )
 
-const handleLogout = async () => {
+const openLogoutModal = () => {
+  isLogoutModalOpen.value = true
+}
+
+const closeLogoutModal = () => {
+  if (isLoggingOut.value) return
+  isLogoutModalOpen.value = false
+}
+
+const confirmLogout = async () => {
+  if (isLoggingOut.value) return
+
+  isLoggingOut.value = true
   adminSession.value = null
+  adminAccessToken.value = null
+  adminRefreshToken.value = null
   await navigateTo('/manage/login')
 }
 </script>
@@ -258,5 +319,102 @@ const handleLogout = async () => {
 
 .mobile-link:hover {
   background: rgba(6, 95, 70, 0.1);
+}
+
+.admin-toast-stack {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 80;
+  display: grid;
+  gap: 0.55rem;
+  pointer-events: none;
+}
+
+.admin-toast {
+  min-width: 15rem;
+  max-width: min(86vw, 24rem);
+  border-radius: 0.85rem;
+  border: 1px solid transparent;
+  padding: 0.7rem 0.9rem;
+  font-size: 0.84rem;
+  font-weight: 600;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+  opacity: 0;
+  transform: translate3d(18px, -8px, 0);
+  transition: transform 0.26s ease, opacity 0.26s ease;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.admin-toast.is-visible {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+
+.admin-toast-info {
+  color: #0f3d35;
+  border-color: rgba(13, 148, 136, 0.28);
+  background: rgba(204, 251, 241, 0.98);
+}
+
+.admin-toast-success {
+  color: #064e3b;
+  border-color: rgba(22, 163, 74, 0.28);
+  background: rgba(220, 252, 231, 0.98);
+}
+
+.admin-toast-warning {
+  color: #7c2d12;
+  border-color: rgba(234, 88, 12, 0.3);
+  background: rgba(255, 237, 213, 0.98);
+}
+
+.admin-toast-error {
+  color: #7f1d1d;
+  border-color: rgba(220, 38, 38, 0.3);
+  background: rgba(254, 226, 226, 0.98);
+}
+
+.btn-primary {
+  color: #fff;
+  background: #065f46;
+  border: 1px solid transparent;
+}
+
+.btn-primary:hover {
+  background: #064e3b;
+}
+
+.btn-primary:disabled,
+.btn-ghost:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.36);
+  backdrop-filter: blur(1px);
+}
+
+.confirm-box {
+  width: min(92vw, 24rem);
+  border-radius: 1rem;
+  border: 1px solid rgba(6, 95, 70, 0.16);
+  background: #fff;
+  padding: 1rem;
+}
+
+.confirm-action {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
 }
 </style>

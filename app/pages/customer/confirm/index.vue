@@ -35,8 +35,8 @@
                 <p v-else-if="checkError" class="mt-3 text-sm text-[#9b2c2c]">{{ checkError }}</p>
 
                 <div class="mt-6 flex flex-wrap gap-3">
-                    <NuxtLink :to="trackLink" class="btn-primary rounded-xl px-6 py-3 text-sm font-semibold">
-                        ไปหน้าติดตามสถานะ
+                    <NuxtLink :to="paymentLink" class="btn-primary rounded-xl px-6 py-3 text-sm font-semibold">
+                        ชำระเงินตอนนี้
                     </NuxtLink>
                     <NuxtLink to="/customer" class="btn-ghost rounded-xl px-6 py-3 text-sm font-semibold">
                         กลับหน้าหลัก
@@ -48,19 +48,67 @@
                 </p>
             </div>
         </section>
+
+        <div
+            v-if="isSaveRefModalOpen"
+            class="confirm-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="save-ref-title"
+            @click.self="closeSaveRefModal"
+        >
+            <div class="confirm-box">
+                <h2 id="save-ref-title" class="font-display text-2xl text-[#21423b]">บันทึกเลขอ้างอิงไว้ก่อน</h2>
+                <p class="mt-2 text-sm text-[#4f6660]">กรุณาแคปหน้าจอนี้เพื่อเก็บเลขอ้างอิงไว้ใช้ติดตามสถานะภายหลัง</p>
+
+                <div class="mt-4 rounded-xl border border-[rgba(6,95,70,0.16)] bg-white p-4">
+                    <p class="text-xs uppercase tracking-[0.16em] text-[#5a7770]">เลขอ้างอิง</p>
+                    <p class="mt-1 text-xl font-bold text-[#21423b]">{{ referenceNo }}</p>
+                    <p class="mt-2 text-xs text-[#5a7770]">เบอร์โทรค้นหา: {{ maskedPhone }}</p>
+                </div>
+
+                <p class="mt-3 text-xs text-[#5a7770]">
+                    เคล็ดลัด: Mac กด Shift + Command + 3, iPhone กดปุ่มเพิ่มเสียง + ปุ่มข้างเครื่อง, Android กดปุ่มลดเสียง + ปุ่มเปิด/ปิด
+                </p>
+
+                <div class="mt-5 flex flex-wrap justify-end gap-2">
+                    <button type="button" class="btn-ghost rounded-xl px-4 py-2 text-sm font-semibold" @click="copyReferenceNo">
+                        {{ copiedRef ? 'คัดลอกแล้ว' : 'คัดลอกเลขอ้างอิง' }}
+                    </button>
+                    <button
+                        type="button"
+                        class="btn-primary rounded-xl px-4 py-2 text-sm font-semibold"
+                        :disabled="isDownloadingImage"
+                        @click="downloadReferenceImage"
+                    >
+                        {{ isDownloadingImage ? 'กำลังสร้างภาพ...' : 'ดาวน์โหลดภาพเลขอ้างอิง' }}
+                    </button>
+                    <button type="button" class="btn-primary rounded-xl px-4 py-2 text-sm font-semibold" @click="closeSaveRefModal">
+                        บันทึกแล้ว
+                    </button>
+                </div>
+            </div>
+        </div>
     </main>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import type { PublicBookingTrackData } from '~/composables/usePublicBookingApi'
 import { usePublicBookingApi } from '~/composables/usePublicBookingApi'
 
 const route = useRoute()
 const { trackBooking } = usePublicBookingApi()
 
 const backendStatus = ref<null | 'pending' | 'processing' | 'completed' | 'canceled'>(null)
+const bookingId = ref('')
+const trackingData = ref<PublicBookingTrackData | null>(null)
 const isChecking = ref(false)
 const checkError = ref('')
+const isSaveRefModalOpen = ref(false)
+const copiedRef = ref(false)
+const isDownloadingImage = ref(false)
+let copiedRefTimer: ReturnType<typeof setTimeout> | null = null
 
 const referenceNo = computed(() => {
     if (typeof route.query.ref === 'string' && route.query.ref.trim()) return route.query.ref.trim().toUpperCase()
@@ -99,6 +147,29 @@ const maskedPhone = computed(() => {
     return `${onlyDigits.slice(0, 3)}-xxx-${onlyDigits.slice(-3)}`
 })
 
+const customerNameLabel = computed(() => {
+    const firstName = trackingData.value?.delivery_first_name?.trim() || ''
+    const lastName = trackingData.value?.delivery_last_name?.trim() || ''
+    const fullName = `${firstName} ${lastName}`.trim()
+    return fullName || 'ไม่ระบุชื่อผู้จอง'
+})
+
+const customerNoteLabel = computed(() => {
+    const note = trackingData.value?.internal_note?.trim()
+    return note || 'ไม่มี'
+})
+
+const orderCreatedAtLabel = computed(() => {
+    const createdAt = trackingData.value?.created_at
+    if (!createdAt) return '-'
+    const date = new Date(createdAt)
+    if (Number.isNaN(date.getTime())) return '-'
+    return new Intl.DateTimeFormat('th-TH', {
+        dateStyle: 'medium',
+        timeStyle: 'short'
+    }).format(date)
+})
+
 const trackLink = computed(() => ({
     path: '/customer/track',
     query: {
@@ -107,7 +178,136 @@ const trackLink = computed(() => ({
     }
 }))
 
+const paymentLink = computed(() => ({
+    path: '/customer/payment',
+    query: {
+        id: bookingId.value || undefined,
+        ref: referenceNo.value,
+        phone: phone.value,
+        item: itemName.value
+    }
+}))
+
+const openSaveRefModal = () => {
+    isSaveRefModalOpen.value = true
+}
+
+const closeSaveRefModal = () => {
+    isSaveRefModalOpen.value = false
+}
+
+const copyReferenceNo = async () => {
+    if (!import.meta.client) return
+
+    try {
+        await navigator.clipboard.writeText(referenceNo.value)
+        copiedRef.value = true
+        if (copiedRefTimer) {
+            clearTimeout(copiedRefTimer)
+        }
+        copiedRefTimer = setTimeout(() => {
+            copiedRef.value = false
+        }, 1500)
+    } catch {
+        copiedRef.value = false
+    }
+}
+
+const downloadReferenceImage = async () => {
+    if (!import.meta.client || isDownloadingImage.value) return
+
+    isDownloadingImage.value = true
+    try {
+        const canvas = document.createElement('canvas')
+        canvas.width = 1200
+        canvas.height = 960
+
+        const ctx = canvas.getContext('2d')
+        if (!ctx) {
+            isDownloadingImage.value = false
+            return
+        }
+
+        ctx.fillStyle = '#f8f5f0'
+        ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+        ctx.fillStyle = '#ffffff'
+        ctx.strokeStyle = 'rgba(6,95,70,0.22)'
+        ctx.lineWidth = 2
+        const cardX = 80
+        const cardY = 80
+        const cardW = 1040
+        const cardH = 800
+        ctx.beginPath()
+        ctx.roundRect(cardX, cardY, cardW, cardH, 24)
+        ctx.fill()
+        ctx.stroke()
+
+        ctx.fillStyle = '#5a7770'
+        ctx.font = '600 26px Noto Sans Thai, sans-serif'
+        ctx.fillText('หลักฐานการยืนยันรายการ', 130, 160)
+
+        ctx.fillStyle = '#21423b'
+        ctx.font = '700 56px Noto Sans Thai, sans-serif'
+        ctx.fillText(referenceNo.value, 130, 255)
+
+        ctx.fillStyle = '#36524b'
+        ctx.font = '600 30px Noto Sans Thai, sans-serif'
+        ctx.fillText(`ประเภท: ${requestTypeLabel.value}`, 130, 330)
+        ctx.fillText(`รายการ: ${itemName.value}`, 130, 380)
+        ctx.fillText(`ผู้จอง: ${customerNameLabel.value}`, 130, 430)
+        ctx.fillText(`เบอร์โทรค้นหา: ${maskedPhone.value}`, 130, 480)
+        ctx.fillText(`สถานะล่าสุด: ${backendStatusLabel.value}`, 130, 530)
+        ctx.fillText(`สร้างรายการเมื่อ: ${orderCreatedAtLabel.value}`, 130, 580)
+
+        ctx.fillStyle = '#21423b'
+        ctx.font = '700 24px Noto Sans Thai, sans-serif'
+        ctx.fillText('หมายเหตุจากลูกค้า', 130, 650)
+
+        ctx.fillStyle = '#4f6660'
+        ctx.font = '500 22px Noto Sans Thai, sans-serif'
+        const maxChars = 70
+        const note = customerNoteLabel.value
+        const wrapped = note.length > maxChars
+            ? `${note.slice(0, maxChars)}...`
+            : note
+        ctx.fillText(wrapped, 130, 695)
+
+        const now = new Date()
+        const timestamp = new Intl.DateTimeFormat('th-TH', {
+            dateStyle: 'medium',
+            timeStyle: 'short'
+        }).format(now)
+        ctx.fillStyle = '#5a7770'
+        ctx.font = '500 24px Noto Sans Thai, sans-serif'
+        ctx.fillText(`สร้างไฟล์ภาพเมื่อ: ${timestamp}`, 130, 775)
+
+        ctx.fillStyle = '#5a7770'
+        ctx.font = '500 22px Noto Sans Thai, sans-serif'
+        ctx.fillText('กรุณาเก็บภาพนี้ไว้เพื่อตรวจสอบสถานะภายหลัง', 130, 825)
+
+        const dataUrl = canvas.toDataURL('image/png')
+        const link = document.createElement('a')
+        link.href = dataUrl
+        link.download = `${referenceNo.value || 'booking-reference'}.png`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+    } finally {
+        isDownloadingImage.value = false
+    }
+}
+
+onBeforeUnmount(() => {
+    if (copiedRefTimer) {
+        clearTimeout(copiedRefTimer)
+        copiedRefTimer = null
+    }
+})
+
 onMounted(async () => {
+    openSaveRefModal()
+
     if (referenceNo.value === 'NS-UNKNOWN' || phone.value === '-') return
 
     isChecking.value = true
@@ -115,9 +315,13 @@ onMounted(async () => {
 
     try {
         const tracking = await trackBooking(referenceNo.value, phone.value)
+        trackingData.value = tracking
         backendStatus.value = tracking.status
+        bookingId.value = tracking.id
     } catch {
+        trackingData.value = null
         backendStatus.value = null
+        bookingId.value = ''
         checkError.value = 'ไม่สามารถตรวจสอบสถานะล่าสุดจากระบบได้ในขณะนี้'
     } finally {
         isChecking.value = false
@@ -179,5 +383,26 @@ onMounted(async () => {
     background: var(--brand);
     color: #fff;
     border-color: var(--brand);
+}
+
+.confirm-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: rgba(15, 23, 42, 0.36);
+    backdrop-filter: blur(1px);
+}
+
+.confirm-box {
+    width: min(92vw, 30rem);
+    border-radius: 1rem;
+    border: 1px solid rgba(6, 95, 70, 0.16);
+    background: #fff;
+    padding: 1rem;
+    box-shadow: 0 14px 36px rgba(15, 23, 42, 0.2);
 }
 </style>

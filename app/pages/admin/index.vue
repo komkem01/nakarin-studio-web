@@ -1,7 +1,8 @@
 <script setup lang="ts">
-const adminSession = useCookie<string | null>('admin_session')
+const { ensureAdminAuth } = useAdminApi()
+const isAuthenticated = await ensureAdminAuth()
 
-if (adminSession.value) {
+if (isAuthenticated) {
   await navigateTo('/admin/dashboard', { redirectCode: 302 })
 } else {
   await navigateTo('/manage/login', { redirectCode: 302 })

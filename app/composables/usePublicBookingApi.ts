@@ -10,10 +10,69 @@ export type PublicBookingTrackData = {
   status: 'pending' | 'processing' | 'completed' | 'canceled'
   payment: 'deposit' | 'paid'
   internal_note?: string | null
+  delivery_first_name?: string | null
+  delivery_last_name?: string | null
   delivery_phone?: string | null
+  delivery_no?: string | null
+  delivery_village?: string | null
+  delivery_street?: string | null
   delivery_note?: string | null
   created_at: string
   updated_at: string
+}
+
+export type BookingItem = {
+  id: string
+  booking_id: string
+  product_id: string
+  product_name: string
+  unit_price_at_booking: number
+  quantity: number
+  line_total: number
+  note?: string | null
+}
+
+export type PaymentItem = {
+  id: string
+  booking_id: string
+  channel: 'bank_transfer' | 'promptpay' | 'cash' | 'credit_card' | 'other'
+  amount: number
+  deposit_amount: number
+  status: 'pending' | 'paid' | 'failed' | 'refunded'
+  proof_url?: string | null
+  note?: string | null
+  paid_at?: string | null
+  created_at?: string
+}
+
+export type CreatePaymentPayload = {
+  booking_id: string
+  channel: PaymentItem['channel']
+  amount: number
+  deposit_amount: number
+  status?: PaymentItem['status']
+  proof_url?: string
+  note?: string
+  paid_at?: string
+}
+
+export type UploadPaymentProofPayload = {
+  bookingNo: string
+  phone: string
+  paymentId: string
+  file: File
+}
+
+export type PublicPaymentSubmitPayload = {
+  bookingNo: string
+  phone: string
+  channel: PaymentItem['channel']
+  amount: number
+  depositAmount: number
+  note?: string
+  paidAt?: string
+  proofUrl?: string
+  file?: File
 }
 
 export type ProvinceItem = {
@@ -60,6 +119,10 @@ export type ProductItem = {
   id: string
   name: string
   description?: string | null
+  suitable_for?: string | null
+  on_site?: string | null
+  received_items?: string | null
+  note?: string | null
   price: number
   is_active: boolean
   is_available: boolean
@@ -210,6 +273,63 @@ export const usePublicBookingApi = () => {
     })
   }
 
+  const listBookingItems = (bookingId: string) => {
+    return request<BookingItem[]>('/api/v1/system/booking-items', {
+      method: 'GET',
+      query: {
+        booking_id: bookingId
+      }
+    })
+  }
+
+  const listPayments = (bookingId: string) => {
+    return request<PaymentItem[]>('/api/v1/system/payments', {
+      method: 'GET',
+      query: {
+        booking_id: bookingId
+      }
+    })
+  }
+
+  const createPayment = (payload: CreatePaymentPayload) => {
+    return request<null>('/api/v1/system/payments', {
+      method: 'POST',
+      body: payload
+    })
+  }
+
+  const uploadPaymentProof = async (payload: UploadPaymentProofPayload) => {
+    const formData = new FormData()
+    formData.append('booking_no', payload.bookingNo)
+    formData.append('phone', payload.phone)
+    formData.append('payment_id', payload.paymentId)
+    formData.append('proof', payload.file)
+
+    return request<{ proof_url: string }>('/api/v1/public/payments/upload-proof', {
+      method: 'POST',
+      body: formData
+    })
+  }
+
+  const submitPublicPayment = async (payload: PublicPaymentSubmitPayload) => {
+    const formData = new FormData()
+    formData.append('booking_no', payload.bookingNo)
+    formData.append('phone', payload.phone)
+    formData.append('channel', payload.channel)
+    formData.append('amount', String(payload.amount))
+    formData.append('deposit_amount', String(payload.depositAmount))
+
+    if (payload.note) formData.append('note', payload.note)
+    if (payload.paidAt) formData.append('paid_at', payload.paidAt)
+    if (payload.proofUrl) formData.append('proof_url', payload.proofUrl)
+    if (payload.file) formData.append('proof', payload.file)
+
+    return request<{ payment_id: string }>('/api/v1/public/payments/submit', {
+      method: 'POST',
+      body: formData
+    })
+  }
+
   return {
     createAggregateBooking,
     trackBooking,
@@ -220,6 +340,11 @@ export const usePublicBookingApi = () => {
     listSubDistricts,
     listZipcodes,
     listProducts,
-    getProductById
+    getProductById,
+    listBookingItems,
+    listPayments,
+    createPayment,
+    uploadPaymentProof,
+    submitPublicPayment
   }
 }

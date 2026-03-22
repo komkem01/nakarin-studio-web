@@ -4,7 +4,7 @@
                 <div class="flex flex-wrap items-center justify-between gap-3">
                     <div>
                         <p class="text-sm font-semibold tracking-wide text-[#48645d]">Product Detail</p>
-                        <h1 class="mt-1 text-2xl font-bold text-[#21423b]">{{ product.name }}</h1>
+                        <h1 class="mt-1 text-2xl font-bold text-[#21423b]">{{ displayProductName }}</h1>
                     </div>
                     <NuxtLink to="/admin/product" class="btn-ghost rounded-xl px-4 py-2 text-sm font-semibold">กลับหน้าจัดการสินค้า</NuxtLink>
                 </div>
@@ -18,7 +18,12 @@
                     </label>
                     <label class="block">
                         <span class="mb-1 block text-sm font-medium text-[#36524b]">หมวดหมู่</span>
-                        <input v-model="form.category" class="field" />
+                        <select v-model="form.categoryId" class="field">
+                            <option value="">เลือกหมวดหมู่</option>
+                            <option v-for="item in categories" :key="item.id" :value="item.id">
+                                {{ item.name }}
+                            </option>
+                        </select>
                     </label>
                     <label class="block">
                         <span class="mb-1 block text-sm font-medium text-[#36524b]">ราคา</span>
@@ -29,6 +34,56 @@
                         <input v-model="form.leadTime" class="field" />
                     </label>
                 </div>
+
+                <label class="block">
+                    <span class="mb-1 block text-sm font-medium text-[#36524b]">รายละเอียดสินค้า</span>
+                    <textarea
+                        v-model="form.description"
+                        rows="4"
+                        class="field resize-none"
+                        placeholder="ระบุรายละเอียดสินค้า จุดเด่น หรือข้อมูลสำคัญ"
+                    ></textarea>
+                </label>
+
+                <div class="grid gap-4 md:grid-cols-2">
+                    <label class="block">
+                        <span class="mb-1 block text-sm font-medium text-[#36524b]">เหมาะกับงาน</span>
+                        <input
+                            v-model="form.suitableFor"
+                            class="field"
+                            placeholder="เช่น งานครอบครัว 30-80 คน"
+                        />
+                    </label>
+
+                    <label class="block">
+                        <span class="mb-1 block text-sm font-medium text-[#36524b]">หน้างาน</span>
+                        <input
+                            v-model="form.onSite"
+                            class="field"
+                            placeholder="เช่น ส่งงานตรงเวลา + ตรวจความเรียบร้อย"
+                        />
+                    </label>
+                </div>
+
+                <label class="block">
+                    <span class="mb-1 block text-sm font-medium text-[#36524b]">รายการที่ได้รับ</span>
+                    <textarea
+                        v-model="form.receivedItems"
+                        rows="4"
+                        class="field resize-none"
+                        placeholder="หนึ่งรายการต่อหนึ่งบรรทัด"
+                    ></textarea>
+                </label>
+
+                <label class="block">
+                    <span class="mb-1 block text-sm font-medium text-[#36524b]">หมายเหตุสำหรับลูกค้า</span>
+                    <textarea
+                        v-model="form.note"
+                        rows="3"
+                        class="field resize-none"
+                        placeholder="เช่น สี/ขนาดอาจแตกต่างเล็กน้อยตามงานจริง"
+                    ></textarea>
+                </label>
 
                 <label class="inline-flex items-center gap-2 text-sm text-[#36524b]">
                     <input v-model="form.isActive" type="checkbox" />
@@ -67,6 +122,7 @@
                         <button
                             type="button"
                             class="btn-primary rounded-xl px-4 py-2 text-sm font-semibold"
+                            :disabled="isSaving"
                             @click="requestSave"
                         >
                             บันทึก
@@ -95,155 +151,255 @@
                     </div>
                 </section>
 
-                <p v-if="flashMessage" class="text-sm text-[#4f6660]">{{ flashMessage }}</p>
             </section>
 
-            <dialog ref="saveConfirmDialog" class="modal">
-                <div class="modal-box">
+            <div v-if="isSaveModalOpen" class="confirm-overlay" @click.self="closeSaveModal">
+                <div class="confirm-box">
                     <h3 class="text-lg font-bold text-[#21423b]">ยืนยันการบันทึกข้อมูล</h3>
                     <p class="py-3 text-sm text-[#48645d]">ต้องการบันทึกการแก้ไขข้อมูลสินค้านี้ใช่หรือไม่</p>
-                    <div class="modal-action">
-                        <form method="dialog">
-                            <button
-                                type="submit"
-                                class="btn-ghost rounded-xl px-3 py-2 text-xs font-semibold"
-                                @click="flashMessage = 'ยกเลิกการบันทึกข้อมูล'"
-                            >
-                                ยกเลิก
-                            </button>
-                        </form>
+                    <div class="confirm-action">
+                        <button
+                            type="button"
+                            class="btn-ghost rounded-xl px-3 py-2 text-xs font-semibold"
+                            :disabled="isSaving"
+                            @click="closeSaveModal"
+                        >
+                            ยกเลิก
+                        </button>
                         <button
                             type="button"
                             class="btn-primary rounded-xl px-3 py-2 text-xs font-semibold"
-                            @click="handleSave"
+                            :disabled="isSaving"
+                            @click="confirmSave"
                         >
-                            ยืนยันบันทึก
+                            {{ isSaving ? 'กำลังบันทึก...' : 'ยืนยันบันทึก' }}
                         </button>
                     </div>
                 </div>
-                <form method="dialog" class="modal-backdrop">
-                    <button type="submit">close</button>
-                </form>
-            </dialog>
+            </div>
 
-            <dialog ref="removeImageConfirmDialog" class="modal">
-                <div class="modal-box">
+            <div v-if="isRemoveImageModalOpen" class="confirm-overlay" @click.self="closeRemoveImageModal">
+                <div class="confirm-box">
                     <h3 class="text-lg font-bold text-[#21423b]">ยืนยันการลบรูปสินค้า</h3>
                     <p class="py-3 text-sm text-[#48645d]">ต้องการลบรูปสินค้านี้ใช่หรือไม่</p>
-                    <div class="modal-action">
-                        <form method="dialog">
-                            <button
-                                type="submit"
-                                class="btn-ghost rounded-xl px-3 py-2 text-xs font-semibold"
-                                @click="clearPendingRemoveImage"
-                            >
-                                ยกเลิก
-                            </button>
-                        </form>
+                    <div class="confirm-action">
+                        <button
+                            type="button"
+                            class="btn-ghost rounded-xl px-3 py-2 text-xs font-semibold"
+                            :disabled="isDeletingImage"
+                            @click="closeRemoveImageModal"
+                        >
+                            ยกเลิก
+                        </button>
                         <button
                             type="button"
                             class="btn-primary rounded-xl px-3 py-2 text-xs font-semibold"
+                            :disabled="isDeletingImage"
                             @click="confirmRemoveImage"
                         >
-                            ยืนยันลบ
+                            {{ isDeletingImage ? 'กำลังลบ...' : 'ยืนยันลบ' }}
                         </button>
                     </div>
                 </div>
-                <form method="dialog" class="modal-backdrop">
-                    <button type="submit" @click="clearPendingRemoveImage">close</button>
-                </form>
-            </dialog>
+            </div>
     </section>
 </template>
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
-import { useAdminMvpStore } from '~/composables/useAdminMvpStore'
-import type { AdminCatalogItem } from '~/data/admin-mvp'
 
 definePageMeta({
     layout: 'admin'
 })
 
-const route = useRoute()
-const { catalog, updateCatalogItem } = useAdminMvpStore()
-
-const fallbackProduct: AdminCatalogItem = {
-    id: 'fallback-product',
-    name: 'ไม่พบรายการ',
-    category: '-',
-    price: 0,
-    leadTime: '-',
-    isActive: false,
-    images: []
+type ProductApiItem = {
+    id: string
+    category_id?: string | null
+    name: string
+    description?: string | null
+    suitable_for?: string | null
+    on_site?: string | null
+    received_items?: string | null
+    note?: string | null
+    price: number
+    is_active: boolean
+    is_available: boolean
+    prep_time: number
 }
 
-const product = computed<AdminCatalogItem>(() => {
-    const id = String(route.params.id || '')
-    return catalog.value.find((item) => item.id === id) || catalog.value[0] || fallbackProduct
-})
+type CategoryApiItem = {
+    id: string
+    name: string
+    is_active: boolean
+}
+
+type ProductImageApiItem = {
+    id: string
+    product_id: string
+    image_url: string
+    sort_order: number
+    is_active: boolean
+}
+
+const route = useRoute()
+const { request } = useAdminApi()
+const { showToast } = useAdminToast()
+
+const productId = computed(() => String(route.params.id || ''))
+const product = ref<ProductApiItem | null>(null)
+const categories = ref<CategoryApiItem[]>([])
+const imageEntries = ref<ProductImageApiItem[]>([])
 
 const form = reactive({
-    name: product.value.name,
-    category: product.value.category,
-    price: product.value.price,
-    leadTime: product.value.leadTime,
-    isActive: product.value.isActive,
-    images: [...(product.value.images || [])]
+    name: '',
+    categoryId: '',
+    price: 0,
+    leadTime: '',
+    description: '',
+    suitableFor: '',
+    onSite: '',
+    receivedItems: '',
+    note: '',
+    isActive: false,
+    images: [] as string[]
 })
 
-const flashMessage = ref('')
 const imageInput = ref<HTMLInputElement | null>(null)
 const selectedImageFiles = ref<File[]>([])
 const isUploadingImages = ref(false)
-const saveConfirmDialog = ref<HTMLDialogElement | null>(null)
-const removeImageConfirmDialog = ref<HTMLDialogElement | null>(null)
+const isSaving = ref(false)
+const isDeletingImage = ref(false)
+const isSaveModalOpen = ref(false)
+const isRemoveImageModalOpen = ref(false)
 const pendingRemoveImageIndex = ref<number | null>(null)
 
-const syncForm = () => {
-    form.name = product.value.name
-    form.category = product.value.category
-    form.price = product.value.price
-    form.leadTime = product.value.leadTime
-    form.isActive = product.value.isActive
-    form.images = [...(product.value.images || [])]
+const displayProductName = computed(() => form.name || 'ไม่พบรายการ')
+
+const toLeadTimeText = (prepTime: number): string => {
+    if (!Number.isFinite(prepTime) || prepTime <= 0) return ''
+    return `${prepTime} วัน`
 }
 
-watch(product, () => {
+const parseLeadTime = (value: string): number => {
+    const match = String(value || '').match(/\d+/)
+    if (!match) return 0
+    const parsed = Number(match[0])
+    return Number.isFinite(parsed) ? Math.max(0, parsed) : 0
+}
+
+const syncForm = () => {
+    form.name = product.value?.name || ''
+    form.categoryId = product.value?.category_id || ''
+    form.price = Number(product.value?.price || 0)
+    form.leadTime = toLeadTimeText(Number(product.value?.prep_time || 0))
+    form.description = product.value?.description || ''
+    form.suitableFor = product.value?.suitable_for || ''
+    form.onSite = product.value?.on_site || ''
+    form.receivedItems = product.value?.received_items || ''
+    form.note = product.value?.note || ''
+    form.isActive = Boolean(product.value?.is_active)
+    form.images = imageEntries.value.map((item) => item.image_url)
+}
+
+const loadProduct = async () => {
+    try {
+        product.value = await request<ProductApiItem>(`/api/v1/system/products/${productId.value}`, {
+            method: 'GET'
+        })
+    } catch {
+        product.value = null
+        showToast('warning', 'โหลดข้อมูลสินค้าไม่สำเร็จ')
+    }
+}
+
+const loadCategories = async () => {
+    try {
+        categories.value = await request<CategoryApiItem[]>('/api/v1/system/product-categories', {
+            method: 'GET',
+            query: { is_active: true }
+        })
+    } catch {
+        categories.value = []
+        showToast('warning', 'โหลดข้อมูลหมวดหมู่ไม่สำเร็จ')
+    }
+}
+
+const loadProductImages = async () => {
+    try {
+        imageEntries.value = await request<ProductImageApiItem[]>('/api/v1/system/product-images', {
+            method: 'GET',
+            query: {
+                product_id: productId.value,
+                is_active: true
+            }
+        })
+    } catch {
+        imageEntries.value = []
+    }
+}
+
+const loadPageData = async () => {
+    await Promise.all([loadProduct(), loadCategories(), loadProductImages()])
     syncForm()
-    flashMessage.value = ''
+}
+
+watch(() => route.params.id, async () => {
+    await loadPageData()
 })
 
-const handleSave = () => {
-    saveConfirmDialog.value?.close()
-
-    const success = updateCatalogItem(product.value.id, {
-        name: form.name.trim(),
-        category: form.category.trim(),
-        price: Number.isFinite(form.price) ? Math.max(0, form.price) : 0,
-        leadTime: form.leadTime.trim(),
-        isActive: form.isActive,
-        images: form.images.map((item) => item.trim()).filter(Boolean)
-    })
-
-    flashMessage.value = success ? 'บันทึกข้อมูลสินค้าเรียบร้อย' : 'ไม่สามารถบันทึกข้อมูลได้'
+const requestSave = () => {
+    if (!form.name.trim()) {
+        showToast('warning', 'กรุณาระบุชื่อรายการ')
+        return
+    }
+    if (!form.categoryId) {
+        showToast('warning', 'กรุณาเลือกหมวดหมู่')
+        return
+    }
+    isSaveModalOpen.value = true
 }
 
-const requestSave = () => {
-    saveConfirmDialog.value?.showModal()
+const closeSaveModal = () => {
+    if (isSaving.value) return
+    isSaveModalOpen.value = false
+}
+
+const confirmSave = async () => {
+    if (isSaving.value) return
+
+    try {
+        isSaving.value = true
+        await request<ProductApiItem>(`/api/v1/system/products/${productId.value}`, {
+            method: 'PATCH',
+            body: {
+                category_id: form.categoryId,
+                name: form.name.trim(),
+                description: form.description.trim() || null,
+                suitable_for: form.suitableFor.trim() || null,
+                on_site: form.onSite.trim() || null,
+                received_items: form.receivedItems.trim() || null,
+                note: form.note.trim() || null,
+                price: Number.isFinite(form.price) ? Math.max(0, form.price) : 0,
+                is_active: form.isActive,
+                is_available: form.isActive,
+                prep_time: parseLeadTime(form.leadTime),
+                sort_order: 0
+            }
+        })
+
+        await loadProduct()
+        syncForm()
+        showToast('success', 'บันทึกข้อมูลสินค้าเรียบร้อย')
+        isSaveModalOpen.value = false
+    } catch {
+        showToast('warning', 'ไม่สามารถบันทึกข้อมูลได้')
+    } finally {
+        isSaving.value = false
+    }
 }
 
 const openFilePicker = () => {
     imageInput.value?.click()
-}
-
-const fileToDataUrl = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(String(reader.result || ''))
-        reader.onerror = () => reject(new Error('ไม่สามารถอ่านไฟล์รูปภาพได้'))
-        reader.readAsDataURL(file)
-    })
 }
 
 const handleImageFileSelect = async (event: Event) => {
@@ -253,57 +409,96 @@ const handleImageFileSelect = async (event: Event) => {
 
     const imageFiles = files.filter((file) => file.type.startsWith('image/'))
     if (!imageFiles.length) {
-        flashMessage.value = 'กรุณาเลือกไฟล์รูปภาพเท่านั้น'
+        showToast('warning', 'กรุณาเลือกไฟล์รูปภาพเท่านั้น')
         input.value = ''
         return
     }
 
     selectedImageFiles.value = imageFiles
-    flashMessage.value = `เลือกรูปแล้ว ${imageFiles.length} รูป กรุณากดอัปโหลดรูป`
+    showToast('info', `เลือกรูปแล้ว ${imageFiles.length} รูป กรุณากดอัปโหลดรูป`)
     input.value = ''
 }
 
 const uploadSelectedImages = async () => {
     if (!selectedImageFiles.value.length) {
-        flashMessage.value = 'ยังไม่ได้เลือกรูป'
+        showToast('warning', 'ยังไม่ได้เลือกรูป')
         return
     }
 
     try {
         isUploadingImages.value = true
-        const encodedImages = await Promise.all(selectedImageFiles.value.map((file) => fileToDataUrl(file)))
-        form.images = [...form.images, ...encodedImages]
-        flashMessage.value = `เพิ่มรูปสินค้าแล้ว ${encodedImages.length} รูป`
+        await Promise.all(
+            selectedImageFiles.value.map((file, index) => {
+                const formData = new FormData()
+                formData.append('product_id', productId.value)
+                formData.append('sort_order', String(imageEntries.value.length + index))
+                formData.append('is_active', 'true')
+                formData.append('image', file)
+
+                return request<ProductImageApiItem>('/api/v1/system/product-images/upload', {
+                    method: 'POST',
+                    body: formData
+                })
+            })
+        )
+
+        await loadProductImages()
+        syncForm()
+        showToast('success', `เพิ่มรูปสินค้าแล้ว ${selectedImageFiles.value.length} รูป`)
         selectedImageFiles.value = []
     } catch {
-        flashMessage.value = 'เกิดข้อผิดพลาดในการเพิ่มรูปสินค้า'
+        showToast('warning', 'เกิดข้อผิดพลาดในการเพิ่มรูปสินค้า')
     } finally {
         isUploadingImages.value = false
     }
-}
-
-const removeImageUrl = (index: number) => {
-    form.images = form.images.filter((_, idx) => idx !== index)
-    flashMessage.value = 'ลบรูปสินค้าแล้ว'
 }
 
 const clearPendingRemoveImage = () => {
     pendingRemoveImageIndex.value = null
 }
 
-const requestRemoveImage = (index: number) => {
-    pendingRemoveImageIndex.value = index
-    removeImageConfirmDialog.value?.showModal()
+const closeRemoveImageModal = () => {
+    if (isDeletingImage.value) return
+    clearPendingRemoveImage()
+    isRemoveImageModalOpen.value = false
 }
 
-const confirmRemoveImage = () => {
+const requestRemoveImage = (index: number) => {
+    pendingRemoveImageIndex.value = index
+    isRemoveImageModalOpen.value = true
+}
+
+const confirmRemoveImage = async () => {
+    if (isDeletingImage.value) return
+
     const index = pendingRemoveImageIndex.value
     if (index === null) return
 
-    removeImageUrl(index)
-    clearPendingRemoveImage()
-    removeImageConfirmDialog.value?.close()
+    const target = imageEntries.value[index]
+    if (!target) {
+        closeRemoveImageModal()
+        return
+    }
+
+    try {
+        isDeletingImage.value = true
+        await request<null>(`/api/v1/system/product-images/${target.id}`, {
+            method: 'DELETE'
+        })
+
+        await loadProductImages()
+        syncForm()
+        showToast('success', 'ลบรูปสินค้าแล้ว')
+        clearPendingRemoveImage()
+        isRemoveImageModalOpen.value = false
+    } catch {
+        showToast('warning', 'ไม่สามารถลบรูปสินค้าได้')
+    } finally {
+        isDeletingImage.value = false
+    }
 }
+
+await loadPageData()
 </script>
 
 <style scoped>
@@ -356,18 +551,19 @@ const confirmRemoveImage = () => {
     background: rgba(255, 255, 255, 0.86);
 }
 
-.modal {
-    border: none;
-    padding: 0;
-    background: transparent;
-}
-
-.modal::backdrop {
-    background: rgba(15, 23, 42, 0.42);
+.confirm-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: rgba(15, 23, 42, 0.36);
     backdrop-filter: blur(1px);
 }
 
-.modal-box {
+.confirm-box {
     width: min(92vw, 24rem);
     border-radius: 1rem;
     border: 1px solid rgba(6, 95, 70, 0.16);
@@ -375,18 +571,9 @@ const confirmRemoveImage = () => {
     padding: 1rem;
 }
 
-.modal-action {
+.confirm-action {
     display: flex;
     justify-content: flex-end;
     gap: 0.5rem;
-}
-
-.modal-backdrop {
-    position: fixed;
-    inset: 0;
-}
-
-.modal-backdrop > button {
-    display: none;
 }
 </style>

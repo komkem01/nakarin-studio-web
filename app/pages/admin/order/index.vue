@@ -93,11 +93,6 @@
       </article>
     </section>
 
-    <div class="toast toast-top toast-end">
-      <div v-for="toast in toasts" :key="toast.id" class="alert" :class="`alert-${toast.type}`">
-        <span>{{ toast.message }}</span>
-      </div>
-    </div>
   </section>
 </template>
 
@@ -110,15 +105,8 @@ definePageMeta({
   layout: 'admin'
 })
 
-type ToastType = 'success' | 'info'
-
-type ToastItem = {
-  id: number
-  type: ToastType
-  message: string
-}
-
 const { orders, updateOrderStatus } = useAdminMvpStore()
+const { showToast } = useAdminToast()
 
 const orderStatuses: AdminOrder['status'][] = ['ใหม่', 'กำลังจัดทำ', 'พร้อมรับสินค้า', 'ส่งมอบแล้ว']
 const statusFilter = ref<'ทั้งหมด' | AdminOrder['status']>('ทั้งหมด')
@@ -126,21 +114,11 @@ const statusDrafts = reactive<Record<string, AdminOrder['status']>>({})
 const openMenuId = ref<string | null>(null)
 const openStatusMenuId = ref<string | null>(null)
 const isFilterMenuOpen = ref(false)
-const toasts = ref<ToastItem[]>([])
-let toastSeed = 0
 
 const filteredOrders = computed(() => {
   if (statusFilter.value === 'ทั้งหมด') return orders.value
   return orders.value.filter((item) => item.status === statusFilter.value)
 })
-
-const showToast = (type: ToastType, message: string) => {
-  const id = ++toastSeed
-  toasts.value = [...toasts.value, { id, type, message }]
-  window.setTimeout(() => {
-    toasts.value = toasts.value.filter((item) => item.id !== id)
-  }, 2600)
-}
 
 const closeMenu = () => {
   openMenuId.value = null
@@ -328,50 +306,6 @@ onBeforeUnmount(() => {
 
 .dropdown-item:hover {
   background: rgba(6, 95, 70, 0.1);
-}
-
-.toast {
-  position: fixed;
-  z-index: 60;
-  display: grid;
-  gap: 0.55rem;
-}
-
-.toast-top {
-  top: 1rem;
-}
-
-.toast-end {
-  right: 1rem;
-}
-
-.alert {
-  min-width: 14rem;
-  max-width: min(86vw, 22rem);
-  border-radius: 0.85rem;
-  border: 1px solid transparent;
-  padding: 0.65rem 0.85rem;
-  font-size: 0.84rem;
-  font-weight: 600;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
-}
-
-.alert-info {
-  color: #0f3d35;
-  border-color: rgba(13, 148, 136, 0.28);
-  background: rgba(204, 251, 241, 0.96);
-}
-
-.alert-success {
-  color: #064e3b;
-  border-color: rgba(22, 163, 74, 0.28);
-  background: rgba(220, 252, 231, 0.96);
-}
-
-.alert-warning {
-  color: #7c2d12;
-  border-color: rgba(234, 88, 12, 0.3);
-  background: rgba(255, 237, 213, 0.96);
 }
 
 </style>
