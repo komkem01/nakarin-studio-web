@@ -35,8 +35,8 @@
 
                     </div>
 
-                    <button type="submit" :disabled="isLocked" class="btn-primary mt-6 w-full rounded-xl px-5 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-70">
-                        ค้นหาสถานะ
+                    <button type="submit" :disabled="isLocked || isSearching" class="btn-primary mt-6 w-full rounded-xl px-5 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-70">
+                        {{ isSearching ? 'กำลังค้นหา...' : 'ค้นหาสถานะ' }}
                     </button>
 
                     <p v-if="searchResult === 'not-found'" class="mt-3 text-sm text-[#9b2c2c]">
@@ -81,9 +81,7 @@
                     <template v-else>
                         <h3 class="font-display text-2xl">ผลการค้นหาจะขึ้นที่นี่</h3>
                         <p class="mt-2 text-sm text-[#4f6660]">
-                            คุณสามารถลองด้วยข้อมูลตัวอย่าง:
-                            <span class="font-semibold">NS-250322-1048</span> และ
-                            <span class="font-semibold">0891112233</span>
+                            กรอกเลขอ้างอิงและเบอร์โทรที่ใช้ตอนยืนยันคำขอ เพื่อค้นหาข้อมูลจริงจากระบบ
                         </p>
                     </template>
                 </section>
@@ -94,25 +92,41 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
-import { useAdminMvpStore } from '~/composables/useAdminMvpStore'
-import { findTrackingRecord, normalizePhone } from '~/data/customer-tracking'
-import type { TrackingRecord } from '~/data/customer-tracking'
+import { normalizePhone } from '~/data/customer-tracking'
+import { usePublicBookingApi } from '~/composables/usePublicBookingApi'
 
 const route = useRoute()
 const ATTEMPT_WINDOW_MS = 60 * 1000
 const MAX_ATTEMPTS_PER_WINDOW = 5
 const STORAGE_KEY = 'customer-track-attempts'
-const { bookings, orders, bookingHistory, orderHistory } = useAdminMvpStore()
+const { trackBooking } = usePublicBookingApi()
 
 const searchForm = reactive({
     referenceNo: '',
     phone: ''
 })
 
-const selectedRecord = ref<TrackingRecord | null>(null)
+type TrackViewRecord = {
+    referenceNo: string
+    phone: string
+    customerName: string
+    type: 'booking' | 'product'
+    itemName: string
+    statusLabel: string
+    appointmentDate: string
+    note: string
+    timeline: Array<{
+        title: string
+        at: string
+        done: boolean
+    }>
+}
+
+const selectedRecord = ref<TrackViewRecord | null>(null)
 const searchResult = ref<'idle' | 'found' | 'not-found'>('idle')
 const lockUntil = ref(0)
 const nowTick = ref(Date.now())
+const isSearching = ref(false)
 let ticker: ReturnType<typeof setInterval> | null = null
 
 const isLocked = computed(() => lockUntil.value > nowTick.value)
@@ -167,71 +181,88 @@ const refreshRateLimitState = () => {
     }
 }
 
-const buildLiveRecord = (referenceNo: string, phone: string): TrackingRecord | null => {
-    const normalizedRef = referenceNo.trim().toUpperCase()
-    const normalizedPhone = normalizePhone(phone)
+const statusLabelMap: Record<string, string> = {
+    pending: 'รอยืนยัน',
+    processing: 'กำลังเตรียมงาน',
+    completed: 'ส่งมอบแล้ว',
+    canceled: 'ยกเลิก'
+}
 
-    const order = orders.value.find(
-        (item) => item.referenceNo.toUpperCase() === normalizedRef && normalizePhone(item.phone) === normalizedPhone
-    )
+const formatDateTime = (value: string | undefined) => {
+    if (!value) return '-'
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return '-'
 
-    if (order) {
-        const orderSteps = (orderHistory.value[order.id] || []).map((step) => ({
-            title: step.note,
-            at: step.at,
-            done: true
-        }))
+    return date.toLocaleString('th-TH', {
+        dateStyle: 'medium',
+        timeStyle: 'short'
+    })
+}
 
-        return {
-            referenceNo: order.referenceNo,
-            phone: order.phone,
-            customerName: order.customerName,
-            type: 'product',
-            itemName: order.itemName,
-            statusLabel: order.status,
-            appointmentDate: order.dueDate,
-            note: 'รายการนี้ได้รับการยืนยันเป็นคำสั่งซื้อแล้ว',
-            timeline: orderSteps.length ? orderSteps : [{ title: 'สร้างคำสั่งซื้อในระบบ', at: '-', done: true }]
-        }
-    }
+const extractAppointmentDate = (note: string | null | undefined) => {
+    if (!note) return '-'
+    const parts = note.split(':')
+    if (parts.length < 2) return '-'
+    return parts.slice(1).join(':').trim() || '-'
+}
 
-    const booking = bookings.value.find(
-        (item) => item.referenceNo.toUpperCase() === normalizedRef && normalizePhone(item.phone) === normalizedPhone
-    )
-
-    if (!booking) return null
-
-    const bookingSteps = (bookingHistory.value[booking.id] || []).map((step) => ({
-        title: step.note,
-        at: step.at,
-        done: true
-    }))
+const buildTrackRecord = (item: {
+    booking_no: string
+    status: string
+    delivery_phone?: string | null
+    delivery_note?: string | null
+    internal_note?: string | null
+    created_at: string
+    updated_at: string
+}): TrackViewRecord => {
+    const statusLabel = statusLabelMap[item.status] || item.status
 
     return {
-        referenceNo: booking.referenceNo,
-        phone: booking.phone,
-        customerName: booking.customerName,
+        referenceNo: item.booking_no,
+        phone: item.delivery_phone || searchForm.phone,
+        customerName: 'ลูกค้า',
         type: 'booking',
-        itemName: booking.packageName,
-        statusLabel: booking.status,
-        appointmentDate: booking.eventDate,
-        note: 'รายการนี้อยู่ในขั้นตอนการจอง รอทีมงานยืนยันเพิ่มเติม',
-        timeline: bookingSteps.length ? bookingSteps : [{ title: 'รับคำขอจองเรียบร้อย', at: '-', done: true }]
+        itemName: 'รายการจอง/สั่งซื้อ',
+        statusLabel,
+        appointmentDate: extractAppointmentDate(item.delivery_note),
+        note: item.internal_note || 'ทีมงานกำลังดำเนินการตามคำขอของคุณ',
+        timeline: [
+            {
+                title: 'สร้างคำขอเรียบร้อย',
+                at: formatDateTime(item.created_at),
+                done: true
+            },
+            {
+                title: `สถานะล่าสุด: ${statusLabel}`,
+                at: formatDateTime(item.updated_at),
+                done: true
+            }
+        ]
     }
 }
 
-const handleSearch = () => {
+const handleSearch = async () => {
     refreshRateLimitState()
 
-    if (isLocked.value) return
+    if (isLocked.value || isSearching.value) return
 
     registerAttemptAndUpdateLimit()
     refreshRateLimitState()
 
-    const liveResult = buildLiveRecord(searchForm.referenceNo, searchForm.phone)
-    const result = liveResult || findTrackingRecord(searchForm.referenceNo, searchForm.phone)
-    selectedRecord.value = result || null
-    searchResult.value = result ? 'found' : 'not-found'
+    const normalizedRef = searchForm.referenceNo.trim().toUpperCase()
+    const normalizedPhone = normalizePhone(searchForm.phone)
+
+    isSearching.value = true
+    try {
+        const item = await trackBooking(normalizedRef, normalizedPhone)
+        selectedRecord.value = buildTrackRecord(item)
+        searchResult.value = 'found'
+    } catch {
+        selectedRecord.value = null
+        searchResult.value = 'not-found'
+    } finally {
+        isSearching.value = false
+    }
 }
 
 onMounted(() => {
@@ -249,6 +280,7 @@ onMounted(() => {
     if (refValue && phoneValue) {
         searchForm.referenceNo = refValue
         searchForm.phone = phoneValue
+        void handleSearch()
     }
 })
 

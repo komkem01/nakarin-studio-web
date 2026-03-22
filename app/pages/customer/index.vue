@@ -74,22 +74,33 @@
 
                 <div class="relative">
                     <div class="product-frame rounded-[28px] p-5 shadow-2xl">
-                        <p class="text-xs uppercase tracking-[0.2em] text-[#5a7770]">Signature Collection</p>
-                        <h2 class="mt-2 font-display text-2xl text-[#21423b]">บายศรีเทพมงคล</h2>
-                        <p class="mt-2 text-sm leading-relaxed text-[#4f6660]">
-                            โทนทอง-ขาว จัดพานอย่างประณีต เหมาะกับงานพิธีการที่ต้องการความเรียบหรู
-                        </p>
+                        <template v-if="isLoading">
+                            <p class="text-sm text-[#4f6660]">กำลังโหลดข้อมูลจากระบบ...</p>
+                        </template>
+                        <template v-else-if="loadError">
+                            <p class="text-sm text-[#9b2c2c]">{{ loadError }}</p>
+                        </template>
+                        <template v-else-if="featuredProduct">
+                            <p class="text-xs uppercase tracking-[0.2em] text-[#5a7770]">Signature Collection</p>
+                            <h2 class="mt-2 font-display text-2xl text-[#21423b]">{{ featuredProduct.name }}</h2>
+                            <p class="mt-2 text-sm leading-relaxed text-[#4f6660]">
+                                {{ featuredProduct.description }}
+                            </p>
 
-                        <div class="mt-6 grid grid-cols-2 gap-3 text-sm">
-                            <div class="rounded-xl bg-white/80 p-3">
-                                <p class="text-[#5a7770]">ระยะเตรียมงาน</p>
-                                <p class="mt-1 font-semibold text-[#21423b]">3-5 วัน</p>
+                            <div class="mt-6 grid grid-cols-2 gap-3 text-sm">
+                                <div class="rounded-xl bg-white/80 p-3">
+                                    <p class="text-[#5a7770]">ระยะเตรียมงาน</p>
+                                    <p class="mt-1 font-semibold text-[#21423b]">{{ featuredProduct.prepTime }}</p>
+                                </div>
+                                <div class="rounded-xl bg-white/80 p-3">
+                                    <p class="text-[#5a7770]">ราคาเริ่มต้น</p>
+                                    <p class="mt-1 font-semibold text-[#21423b]">{{ featuredProduct.price }}</p>
+                                </div>
                             </div>
-                            <div class="rounded-xl bg-white/80 p-3">
-                                <p class="text-[#5a7770]">ราคาเริ่มต้น</p>
-                                <p class="mt-1 font-semibold text-[#21423b]">฿4,500</p>
-                            </div>
-                        </div>
+                        </template>
+                        <template v-else>
+                            <p class="text-sm text-[#4f6660]">ยังไม่มีข้อมูลในระบบ</p>
+                        </template>
                     </div>
                     <div class="stamp">HANDCRAFTED</div>
                 </div>
@@ -100,19 +111,31 @@
             <div class="mb-5 flex items-end justify-between">
                 <div>
                     <p class="text-xs uppercase tracking-[0.18em] text-[#5a7770]">Highlight Works</p>
-                    <h3 class="font-display mt-1 text-2xl text-[#1f2f2b] md:text-3xl">ผลงานที่ลูกค้าเลือกบ่อย</h3>
+                    <h3 class="font-display mt-1 text-2xl text-[#1f2f2b] md:text-3xl">งานบายศรีที่ลูกค้าเลือกบ่อย</h3>
                 </div>
                 <NuxtLink to="/customer/booking" class="link-brand text-sm font-semibold">
                     ดูทั้งหมด
                 </NuxtLink>
             </div>
 
-            <div class="grid gap-4 md:grid-cols-3">
+            <div v-if="isLoading" class="rounded-2xl border border-[rgba(6,95,70,0.12)] bg-white/75 p-5 text-sm text-[#4f6660]">
+                กำลังโหลดรายการงานจากระบบ...
+            </div>
+
+            <div v-else-if="loadError" class="rounded-2xl border border-[#f3c6c6] bg-[#fff6f6] p-5 text-sm text-[#9b2c2c]">
+                {{ loadError }}
+            </div>
+
+            <div v-else-if="highlights.length === 0" class="rounded-2xl border border-[rgba(6,95,70,0.12)] bg-white/75 p-5 text-sm text-[#4f6660]">
+                ยังไม่มีข้อมูลงานบายศรีจริงในระบบ
+            </div>
+
+            <div v-else class="grid gap-4 md:grid-cols-3">
                 <article v-for="item in highlights" :key="item.name" class="card rounded-2xl p-5">
                     <p class="text-xs uppercase tracking-[0.18em] text-[#5a7770]">{{ item.tag }}</p>
                     <h4 class="mt-2 font-display text-xl text-[#1f3a34]">{{ item.name }}</h4>
                     <p class="mt-2 text-sm leading-relaxed text-[#4f6660]">{{ item.detail }}</p>
-                    <p class="link-brand mt-4 text-sm font-semibold">เริ่มต้น {{ item.price }}</p>
+                    <p class="link-brand mt-4 text-sm font-semibold">{{ item.price }}</p>
                 </article>
             </div>
         </section>
@@ -120,26 +143,73 @@
 </template>
 
 <script setup lang="ts">
-const highlights = [
-    {
-        tag: 'งานบวช',
-        name: 'บายศรีพญานาค',
-        detail: 'งานพานสูงเน้นรายละเอียดชั้นใบตองและดอกไม้สด เหมาะกับพิธีที่ต้องการความโดดเด่น',
-        price: '฿7,900'
-    },
-    {
-        tag: 'งานมงคลสมรส',
-        name: 'บายศรีคู่มงคล',
-        detail: 'จัดคู่ตามธีมงาน สีสวยละมุน ถ่ายรูปขึ้นทั้งในงานพิธีและโซนรับแขก',
-        price: '฿6,500'
-    },
-    {
-        tag: 'งานองค์กร',
-        name: 'บายศรีต้อนรับแขก',
-        detail: 'ขนาดกำลังดี ดูภูมิฐาน เหมาะสำหรับพิธีเปิดงานและต้อนรับผู้ใหญ่',
-        price: '฿5,500'
+import { computed, onMounted, ref } from 'vue'
+import { usePublicBookingApi } from '~/composables/usePublicBookingApi'
+
+type HighlightItem = {
+    tag: string
+    name: string
+    detail: string
+    price: string
+}
+
+const { listProducts } = usePublicBookingApi()
+
+const highlights = ref<HighlightItem[]>([])
+const featuredSource = ref<{ name: string; description: string; prepTime: string; price: string } | null>(null)
+const isLoading = ref(true)
+const loadError = ref('')
+
+const formatPrice = (price: number) => {
+    return `เริ่มต้น ${price.toLocaleString('th-TH', { style: 'currency', currency: 'THB', maximumFractionDigits: 0 })}`
+}
+
+const featuredProduct = computed(() => {
+    return featuredSource.value
+})
+
+onMounted(async () => {
+    isLoading.value = true
+    loadError.value = ''
+
+    try {
+        const products = await listProducts()
+        if (!products.length) {
+            highlights.value = []
+            featuredSource.value = null
+            return
+        }
+
+        const firstProduct = products
+            .slice()
+            .sort((a, b) => a.sort_order - b.sort_order)[0]
+
+        if (firstProduct) {
+            featuredSource.value = {
+                name: firstProduct.name,
+                description: firstProduct.description || 'สินค้าแนะนำจากทีมงาน พร้อมปรับรายละเอียดให้เหมาะกับพิธีของคุณ',
+                prepTime: firstProduct.prep_time > 0 ? `${firstProduct.prep_time} วัน` : '3-5 วัน',
+                price: firstProduct.price.toLocaleString('th-TH', { style: 'currency', currency: 'THB', maximumFractionDigits: 0 })
+            }
+        }
+
+        highlights.value = products
+            .sort((a, b) => a.sort_order - b.sort_order)
+            .slice(0, 3)
+            .map((item) => ({
+                tag: 'สินค้าแนะนำ',
+                name: item.name,
+                detail: item.description || 'สินค้าแนะนำจากทีมงาน พร้อมปรับรายละเอียดให้เหมาะกับพิธีของคุณ',
+                price: formatPrice(item.price)
+            }))
+    } catch {
+        highlights.value = []
+        featuredSource.value = null
+        loadError.value = 'ไม่สามารถโหลดข้อมูลจากระบบได้ในขณะนี้'
+    } finally {
+        isLoading.value = false
     }
-]
+})
 </script>
 
 <style scoped>

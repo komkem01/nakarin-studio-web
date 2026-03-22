@@ -25,7 +25,14 @@
                         <p class="text-xs uppercase tracking-[0.16em] text-[#5a7770]">เบอร์โทรค้นหา</p>
                         <p class="mt-1 text-base font-semibold text-[#21423b]">{{ maskedPhone }}</p>
                     </div>
+                    <div>
+                        <p class="text-xs uppercase tracking-[0.16em] text-[#5a7770]">สถานะจากระบบ</p>
+                        <p class="mt-1 text-base font-semibold text-[#21423b]">{{ backendStatusLabel }}</p>
+                    </div>
                 </div>
+
+                <p v-if="isChecking" class="mt-3 text-sm text-[#4f6660]">กำลังตรวจสอบสถานะล่าสุดจากระบบ...</p>
+                <p v-else-if="checkError" class="mt-3 text-sm text-[#9b2c2c]">{{ checkError }}</p>
 
                 <div class="mt-6 flex flex-wrap gap-3">
                     <NuxtLink :to="trackLink" class="btn-primary rounded-xl px-6 py-3 text-sm font-semibold">
@@ -45,9 +52,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { usePublicBookingApi } from '~/composables/usePublicBookingApi'
 
 const route = useRoute()
+const { trackBooking } = usePublicBookingApi()
+
+const backendStatus = ref<null | 'pending' | 'processing' | 'completed' | 'canceled'>(null)
+const isChecking = ref(false)
+const checkError = ref('')
 
 const referenceNo = computed(() => {
     if (typeof route.query.ref === 'string' && route.query.ref.trim()) return route.query.ref.trim().toUpperCase()
@@ -65,6 +78,15 @@ const requestType = computed(() => {
 })
 
 const requestTypeLabel = computed(() => requestType.value === 'product' ? 'คำสั่งซื้อสินค้า' : 'การจองคิวงาน')
+
+const backendStatusLabel = computed(() => {
+    if (!backendStatus.value) return 'รอตรวจสอบ'
+
+    if (backendStatus.value === 'pending') return 'รอดำเนินการ'
+    if (backendStatus.value === 'processing') return 'กำลังดำเนินการ'
+    if (backendStatus.value === 'completed') return 'เสร็จสิ้น'
+    return 'ยกเลิก'
+})
 
 const itemName = computed(() => {
     if (typeof route.query.item === 'string' && route.query.item.trim()) return route.query.item.trim()
@@ -84,6 +106,23 @@ const trackLink = computed(() => ({
         phone: phone.value
     }
 }))
+
+onMounted(async () => {
+    if (referenceNo.value === 'NS-UNKNOWN' || phone.value === '-') return
+
+    isChecking.value = true
+    checkError.value = ''
+
+    try {
+        const tracking = await trackBooking(referenceNo.value, phone.value)
+        backendStatus.value = tracking.status
+    } catch {
+        backendStatus.value = null
+        checkError.value = 'ไม่สามารถตรวจสอบสถานะล่าสุดจากระบบได้ในขณะนี้'
+    } finally {
+        isChecking.value = false
+    }
+})
 </script>
 
 <style scoped>

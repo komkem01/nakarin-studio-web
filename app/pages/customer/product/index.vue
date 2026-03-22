@@ -17,8 +17,20 @@
                 </div>
             </div>
 
-            <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                <article v-for="item in customerProducts" :key="item.id" class="product-card rounded-2xl p-5">
+            <div v-if="isLoading" class="rounded-2xl border border-[rgba(6,95,70,0.14)] bg-white/70 p-6 text-sm text-[#4f6660]">
+                กำลังโหลดข้อมูลสินค้าจากระบบ...
+            </div>
+
+            <div v-else-if="loadError" class="rounded-2xl border border-[#f3c6c6] bg-[#fff6f6] p-6 text-sm text-[#9b2c2c]">
+                {{ loadError }}
+            </div>
+
+            <div v-else-if="products.length === 0" class="rounded-2xl border border-[rgba(6,95,70,0.14)] bg-white/70 p-6 text-sm text-[#4f6660]">
+                ยังไม่มีข้อมูลสินค้าในระบบ
+            </div>
+
+            <div v-else class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <article v-for="item in products" :key="item.id" class="product-card rounded-2xl p-5">
                     <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
                         <p class="badge-brand rounded-full px-3 py-1 text-xs font-semibold">{{ item.category }}</p>
                         <p class="text-sm font-semibold text-[#21423b]">{{ item.price }}</p>
@@ -47,7 +59,55 @@
 </template>
 
 <script setup lang="ts">
-import { customerProducts } from '~/data/customer-products'
+import { onMounted, ref } from 'vue'
+import { usePublicBookingApi } from '~/composables/usePublicBookingApi'
+
+type ProductCardItem = {
+    id: string
+    name: string
+    category: string
+    description: string
+    price: string
+    leadTime: string
+    size: string
+}
+
+const { listProducts } = usePublicBookingApi()
+
+const products = ref<ProductCardItem[]>([])
+const isLoading = ref(true)
+const loadError = ref('')
+
+const formatPrice = (price: number) => price.toLocaleString('th-TH', {
+    style: 'currency',
+    currency: 'THB',
+    maximumFractionDigits: 0
+})
+
+onMounted(async () => {
+    isLoading.value = true
+    loadError.value = ''
+
+    try {
+        const items = await listProducts()
+        products.value = items
+            .sort((a, b) => a.sort_order - b.sort_order)
+            .map((item) => ({
+                id: item.id,
+                name: item.name,
+                category: 'สินค้า',
+                description: item.description || 'ไม่มีรายละเอียดสินค้า',
+                price: formatPrice(item.price),
+                leadTime: item.prep_time > 0 ? `${item.prep_time} วัน` : '-',
+                size: '-'
+            }))
+    } catch {
+        products.value = []
+        loadError.value = 'ไม่สามารถโหลดข้อมูลสินค้าจริงจากระบบได้ในขณะนี้'
+    } finally {
+        isLoading.value = false
+    }
+})
 </script>
 
 <style scoped>

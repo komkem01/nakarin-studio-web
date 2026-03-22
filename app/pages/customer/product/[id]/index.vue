@@ -4,8 +4,8 @@
             <div class="mb-8 flex flex-wrap items-end justify-between gap-4">
                 <div>
                     <p class="text-xs uppercase tracking-[0.2em] text-[#5a7770]">Product Detail</p>
-                    <h1 class="font-display mt-1 text-3xl md:text-4xl">{{ selectedProduct.name }}</h1>
-                    <p class="mt-2 text-sm text-[#4f6660]">{{ selectedProduct.category }} • {{ selectedProduct.price }}</p>
+                    <h1 class="font-display mt-1 text-3xl md:text-4xl">{{ productView?.name || 'รายละเอียดสินค้า' }}</h1>
+                    <p class="mt-2 text-sm text-[#4f6660]">{{ productView?.category || 'สินค้า' }}<span v-if="productView"> • {{ productView.price }}</span></p>
                 </div>
                 <div class="flex gap-2">
                     <NuxtLink to="/customer/product" class="btn-ghost rounded-full px-4 py-2 text-sm font-semibold">
@@ -17,46 +17,150 @@
                 </div>
             </div>
 
-            <div class="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+            <div v-if="isProductLoading" class="rounded-2xl border border-[rgba(6,95,70,0.14)] bg-white/75 p-6 text-sm text-[#4f6660]">
+                กำลังโหลดรายละเอียดสินค้าจากระบบ...
+            </div>
+
+            <div v-else-if="productLoadError" class="rounded-2xl border border-[#f3c6c6] bg-[#fff6f6] p-6 text-sm text-[#9b2c2c]">
+                {{ productLoadError }}
+            </div>
+
+            <div v-else-if="!productView" class="rounded-2xl border border-[rgba(6,95,70,0.14)] bg-white/75 p-6 text-sm text-[#4f6660]">
+                ไม่พบข้อมูลสินค้าจริงในระบบ
+            </div>
+
+            <div v-else class="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
                 <article class="product-card rounded-2xl p-5 md:p-6">
                     <div class="mb-5 flex flex-wrap items-center gap-3">
-                        <p class="badge-brand rounded-full px-3 py-1 text-sm font-semibold">{{ selectedProduct.price }}</p>
-                        <p class="badge-brand rounded-full px-3 py-1 text-sm font-semibold">ระยะเตรียม {{ selectedProduct.leadTime }}</p>
-                        <p class="badge-brand rounded-full px-3 py-1 text-sm font-semibold">{{ selectedProduct.size }}</p>
+                        <p class="badge-brand rounded-full px-3 py-1 text-sm font-semibold">{{ productView.price }}</p>
+                        <p class="badge-brand rounded-full px-3 py-1 text-sm font-semibold">ระยะเตรียม {{ productView.leadTime }}</p>
                     </div>
 
-                    <p class="text-sm leading-relaxed text-[#4f6660]">{{ selectedProduct.description }}</p>
+                    <p class="text-sm leading-relaxed text-[#4f6660]">{{ productView.description }}</p>
 
                     <div class="mt-6">
                         <p class="text-sm font-semibold text-[#36524b]">รายการที่ได้รับ</p>
                         <ul class="mt-3 space-y-2">
-                            <li v-for="item in selectedProduct.includes" :key="item" class="flex items-start gap-2 text-sm text-[#4f6660]">
+                            <li v-for="item in productView.includes" :key="item" class="flex items-start gap-2 text-sm text-[#4f6660]">
                                 <span class="dot mt-1.5"></span>
                                 <span>{{ item }}</span>
+                            </li>
+                            <li v-if="!productView.includes.length" class="text-sm text-[#4f6660]">
+                                ไม่มีรายการเพิ่มเติม
                             </li>
                         </ul>
                     </div>
 
                     <div class="mt-6 rounded-xl border border-[rgba(6,95,70,0.14)] bg-white/80 p-4">
                         <p class="text-xs uppercase tracking-[0.16em] text-[#5a7770]">หมายเหตุ</p>
-                        <p class="mt-1 text-sm font-medium text-[#21423b]">{{ selectedProduct.note }}</p>
+                        <p class="mt-1 text-sm font-medium text-[#21423b]">{{ productView.note }}</p>
                     </div>
                 </article>
 
                 <form class="form-card rounded-2xl p-5 md:p-6" @submit.prevent="handleSubmit">
                     <h2 class="font-display text-2xl">สั่งสินค้า</h2>
-                    <p class="mt-1 text-sm text-[#4f6660]">กรอกข้อมูลสั้นๆ เพื่อยืนยันรายละเอียดก่อนจัดเตรียมสินค้า</p>
+                    <p class="mt-1 text-sm text-[#4f6660]">กรอกข้อมูลผู้สั่งและที่อยู่จัดส่งให้ครบ เพื่อยืนยันรายละเอียดก่อนจัดเตรียมสินค้า</p>
 
                     <div class="mt-5 space-y-4">
-                        <label class="block">
-                            <span class="mb-1 block text-sm font-medium text-[#36524b]">ชื่อผู้สั่ง</span>
-                            <input v-model="orderForm.name" type="text" placeholder="เช่น คุณพิมพ์ชนก" class="field" />
-                        </label>
+                        <div class="grid gap-4 sm:grid-cols-2">
+                            <label class="block">
+                                <span class="mb-1 block text-sm font-medium text-[#36524b]">เพศ</span>
+                                <select v-model="orderForm.genderId" class="field">
+                                    <option value="">เลือกเพศ</option>
+                                    <option v-for="gender in genders" :key="gender.id" :value="gender.id">
+                                        {{ gender.name }}
+                                    </option>
+                                </select>
+                            </label>
+
+                            <label class="block">
+                                <span class="mb-1 block text-sm font-medium text-[#36524b]">คำนำหน้า</span>
+                                <select v-model="orderForm.prefixId" class="field" :disabled="!orderForm.genderId">
+                                    <option value="">เลือกคำนำหน้า</option>
+                                    <option v-for="prefix in prefixes" :key="prefix.id" :value="prefix.id">
+                                        {{ prefix.name }}
+                                    </option>
+                                </select>
+                            </label>
+                        </div>
+
+                        <div class="grid gap-4 sm:grid-cols-2">
+                            <label class="block">
+                                <span class="mb-1 block text-sm font-medium text-[#36524b]">ชื่อ</span>
+                                <input v-model="orderForm.firstName" type="text" placeholder="เช่น พิมพ์ชนก" class="field" />
+                            </label>
+
+                            <label class="block">
+                                <span class="mb-1 block text-sm font-medium text-[#36524b]">สกุล</span>
+                                <input v-model="orderForm.lastName" type="text" placeholder="เช่น สุวรรณ" class="field" />
+                            </label>
+                        </div>
 
                         <label class="block">
                             <span class="mb-1 block text-sm font-medium text-[#36524b]">เบอร์โทรศัพท์</span>
                             <input v-model="orderForm.phone" type="tel" placeholder="08x-xxx-xxxx" class="field" />
                         </label>
+
+                        <div class="grid gap-4 sm:grid-cols-2">
+                            <label class="block">
+                                <span class="mb-1 block text-sm font-medium text-[#36524b]">บ้านเลขที่</span>
+                                <input v-model="orderForm.houseNo" type="text" placeholder="เช่น 99/12" class="field" />
+                            </label>
+
+                            <label class="block">
+                                <span class="mb-1 block text-sm font-medium text-[#36524b]">หมู่</span>
+                                <input v-model="orderForm.village" type="text" placeholder="เช่น หมู่ 4" class="field" />
+                            </label>
+                        </div>
+
+                        <label class="block">
+                            <span class="mb-1 block text-sm font-medium text-[#36524b]">ถนน</span>
+                            <input v-model="orderForm.road" type="text" placeholder="เช่น ถนนมิตรภาพ" class="field" />
+                        </label>
+
+                        <div class="grid gap-4 sm:grid-cols-2">
+                            <label class="block">
+                                <span class="mb-1 block text-sm font-medium text-[#36524b]">จังหวัด</span>
+                                <select v-model="orderForm.provinceId" class="field">
+                                    <option value="">เลือกจังหวัด</option>
+                                    <option v-for="province in provinces" :key="province.id" :value="province.id">
+                                        {{ province.name }}
+                                    </option>
+                                </select>
+                            </label>
+
+                            <label class="block">
+                                <span class="mb-1 block text-sm font-medium text-[#36524b]">อำเภอ</span>
+                                <select v-model="orderForm.districtId" class="field" :disabled="!orderForm.provinceId">
+                                    <option value="">เลือกอำเภอ</option>
+                                    <option v-for="district in districts" :key="district.id" :value="district.id">
+                                        {{ district.name }}
+                                    </option>
+                                </select>
+                            </label>
+                        </div>
+
+                        <div class="grid gap-4 sm:grid-cols-2">
+                            <label class="block">
+                                <span class="mb-1 block text-sm font-medium text-[#36524b]">ตำบล</span>
+                                <select v-model="orderForm.subDistrictId" class="field" :disabled="!orderForm.districtId">
+                                    <option value="">เลือกตำบล</option>
+                                    <option v-for="subDistrict in subDistricts" :key="subDistrict.id" :value="subDistrict.id">
+                                        {{ subDistrict.name }}
+                                    </option>
+                                </select>
+                            </label>
+
+                            <label class="block">
+                                <span class="mb-1 block text-sm font-medium text-[#36524b]">เลขไปรษณีย์</span>
+                                <select v-model="orderForm.zipcodeId" class="field" :disabled="!orderForm.subDistrictId">
+                                    <option value="">เลือกไปรษณีย์</option>
+                                    <option v-for="zipcode in zipcodes" :key="zipcode.id" :value="zipcode.id">
+                                        {{ zipcode.name }}
+                                    </option>
+                                </select>
+                            </label>
+                        </div>
 
                         <label class="block">
                             <span class="mb-1 block text-sm font-medium text-[#36524b]">จำนวน</span>
@@ -74,9 +178,12 @@
                         </label>
                     </div>
 
-                    <button type="submit" class="btn-primary mt-6 w-full rounded-xl px-5 py-3 text-sm font-semibold transition">
+                    <button type="submit" :disabled="isSubmitting" class="btn-primary mt-6 w-full rounded-xl px-5 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-70">
                         ส่งคำสั่งซื้อ
                     </button>
+                    <p v-if="submitError" class="mt-3 text-sm text-[#9b2c2c]">
+                        {{ submitError }}
+                    </p>
                     <p class="mt-3 text-xs text-[#5a7770]">
                         อยากดูสินค้ารายการอื่น?
                         <NuxtLink to="/customer/product" class="link-brand font-semibold">กลับไปหน้าสินค้าทั้งหมด</NuxtLink>
@@ -88,63 +195,305 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive } from 'vue'
-import { useAdminMvpStore } from '~/composables/useAdminMvpStore'
-import { customerProductMap, customerProducts } from '~/data/customer-products'
-import type { CustomerProduct } from '~/data/customer-products'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { generateReferenceNo, normalizePhone } from '~/data/customer-tracking'
+import { usePublicBookingApi } from '~/composables/usePublicBookingApi'
 
 const route = useRoute()
-const { createBookingRequest } = useAdminMvpStore()
+const {
+    createAggregateBooking,
+    getProductById,
+    listGenders,
+    listPrefixes,
+    listProvinces,
+    listDistricts,
+    listSubDistricts,
+    listZipcodes
+} = usePublicBookingApi()
 
-const fallbackProduct: CustomerProduct = {
-    id: 'fallback-product',
-    name: 'สินค้าแนะนำ',
-    category: 'สินค้า',
-    description: 'รายการสินค้าเริ่มต้นสำหรับแสดงผลเมื่อไม่พบรหัสสินค้า',
-    price: '฿0',
-    leadTime: '2-3 วัน',
-    size: 'ขนาดมาตรฐาน',
-    includes: ['สินค้า 1 รายการ'],
-    note: 'กรุณาติดต่อทีมงานเพื่อยืนยันรายละเอียด'
+type ProductView = {
+    id: string
+    name: string
+    category: string
+    description: string
+    price: string
+    unitPrice: number
+    leadTime: string
+    includes: string[]
+    note: string
 }
 
-const selectedProduct = computed<CustomerProduct>(() => {
-    const key = String(route.params.id || '')
-    return customerProductMap[key] || customerProductMap['tray-heritage'] || fallbackProduct
-})
+const productView = ref<ProductView | null>(null)
+const isProductLoading = ref(true)
+const productLoadError = ref('')
 
 const orderForm = reactive({
-    name: '',
+    genderId: '',
+    prefixId: '',
+    firstName: '',
+    lastName: '',
     phone: '',
+    houseNo: '',
+    village: '',
+    road: '',
+    provinceId: '',
+    districtId: '',
+    subDistrictId: '',
+    zipcodeId: '',
     quantity: 1,
     pickupDate: '',
     note: ''
 })
 
+const genders = ref<Array<{ id: string; name: string }>>([])
+const prefixes = ref<Array<{ id: string; name: string }>>([])
+const provinces = ref<Array<{ id: string; name: string }>>([])
+const districts = ref<Array<{ id: string; name: string }>>([])
+const subDistricts = ref<Array<{ id: string; name: string }>>([])
+const zipcodes = ref<Array<{ id: string; name: string }>>([])
+const isSubmitting = ref(false)
+const submitError = ref('')
+
+const productId = computed(() => String(route.params.id || ''))
+
+const selectedGenderName = computed(() => genders.value.find((item) => item.id === orderForm.genderId)?.name || '')
+const selectedPrefixName = computed(() => prefixes.value.find((item) => item.id === orderForm.prefixId)?.name || '')
+const selectedProvinceName = computed(() => provinces.value.find((item) => item.id === orderForm.provinceId)?.name || '')
+const selectedDistrictName = computed(() => districts.value.find((item) => item.id === orderForm.districtId)?.name || '')
+const selectedSubDistrictName = computed(() => subDistricts.value.find((item) => item.id === orderForm.subDistrictId)?.name || '')
+const selectedZipcode = computed(() => zipcodes.value.find((item) => item.id === orderForm.zipcodeId)?.name || '')
+
+const loadGenders = async () => {
+    try {
+        const items = await listGenders()
+        genders.value = items.map((item) => ({ id: item.id, name: item.name }))
+    } catch {
+        genders.value = []
+    }
+}
+
+const loadPrefixes = async (genderId?: string) => {
+    try {
+        const items = await listPrefixes(genderId)
+        prefixes.value = items.map((item) => ({ id: item.id, name: item.name }))
+    } catch {
+        prefixes.value = []
+    }
+}
+
+const loadProvinces = async () => {
+    try {
+        const items = await listProvinces()
+        provinces.value = items.map((item) => ({ id: item.id, name: item.name }))
+    } catch {
+        provinces.value = []
+    }
+}
+
+const loadDistricts = async (provinceId: string) => {
+    if (!provinceId) {
+        districts.value = []
+        return
+    }
+
+    try {
+        const items = await listDistricts(provinceId)
+        districts.value = items.map((item) => ({ id: item.id, name: item.name }))
+    } catch {
+        districts.value = []
+    }
+}
+
+const loadSubDistricts = async (districtId: string) => {
+    if (!districtId) {
+        subDistricts.value = []
+        return
+    }
+
+    try {
+        const items = await listSubDistricts(districtId)
+        subDistricts.value = items.map((item) => ({ id: item.id, name: item.name }))
+    } catch {
+        subDistricts.value = []
+    }
+}
+
+const loadZipcodes = async (subDistrictId: string) => {
+    if (!subDistrictId) {
+        zipcodes.value = []
+        return
+    }
+
+    try {
+        const items = await listZipcodes(subDistrictId)
+        zipcodes.value = items.map((item) => ({ id: item.id, name: item.name }))
+    } catch {
+        zipcodes.value = []
+    }
+}
+
+const formatPrice = (price: number) => price.toLocaleString('th-TH', {
+    style: 'currency',
+    currency: 'THB',
+    maximumFractionDigits: 0
+})
+
+const loadProduct = async () => {
+    if (!productId.value) {
+        productView.value = null
+        productLoadError.value = 'ไม่พบรหัสสินค้า'
+        isProductLoading.value = false
+        return
+    }
+
+    isProductLoading.value = true
+    productLoadError.value = ''
+
+    try {
+        const item = await getProductById(productId.value)
+        productView.value = {
+            id: item.id,
+            name: item.name,
+            category: 'สินค้า',
+            description: item.description || 'ไม่มีรายละเอียดสินค้า',
+            price: formatPrice(item.price),
+            unitPrice: item.price,
+            leadTime: item.prep_time > 0 ? `${item.prep_time} วัน` : '-',
+            includes: [],
+            note: 'รายละเอียดเพิ่มเติมโปรดสอบถามทีมงาน'
+        }
+    } catch {
+        productView.value = null
+        productLoadError.value = 'ไม่สามารถโหลดข้อมูลสินค้าจริงจากระบบได้ในขณะนี้'
+    } finally {
+        isProductLoading.value = false
+    }
+}
+
+watch(
+    () => orderForm.genderId,
+    async (genderId) => {
+        orderForm.prefixId = ''
+        await loadPrefixes(genderId || undefined)
+    }
+)
+
+watch(
+    () => orderForm.provinceId,
+    async (provinceId) => {
+        orderForm.districtId = ''
+        orderForm.subDistrictId = ''
+        orderForm.zipcodeId = ''
+        subDistricts.value = []
+        zipcodes.value = []
+        await loadDistricts(provinceId)
+    }
+)
+
+watch(
+    () => orderForm.districtId,
+    async (districtId) => {
+        orderForm.subDistrictId = ''
+        orderForm.zipcodeId = ''
+        zipcodes.value = []
+        await loadSubDistricts(districtId)
+    }
+)
+
+watch(
+    () => orderForm.subDistrictId,
+    async (subDistrictId) => {
+        orderForm.zipcodeId = ''
+        await loadZipcodes(subDistrictId)
+    }
+)
+
+onMounted(async () => {
+    await loadProduct()
+    await loadGenders()
+    await loadPrefixes()
+    await loadProvinces()
+})
+
 const handleSubmit = async () => {
+    if (isSubmitting.value) return
+    if (!productView.value) {
+        submitError.value = 'ไม่พบข้อมูลสินค้าจริง ไม่สามารถส่งคำสั่งซื้อได้'
+        return
+    }
+
     const referenceNo = generateReferenceNo()
     const phone = normalizePhone(orderForm.phone)
 
-    createBookingRequest({
-        customerName: orderForm.name.trim() || 'ลูกค้าใหม่',
-        phone,
-        packageName: selectedProduct.value.name,
-        eventDate: orderForm.pickupDate || selectedProduct.value.leadTime,
-        budget: selectedProduct.value.price.replace('฿', ''),
-        referenceNo,
-        note: orderForm.note
-    })
+    const quantity = Math.max(1, Number(orderForm.quantity) || 1)
+    const unitPrice = productView.value.unitPrice
+    const firstName = orderForm.firstName.trim() || 'ลูกค้า'
+    const lastName = orderForm.lastName.trim() || ''
+    const profileNote = [
+        selectedGenderName.value ? `เพศ: ${selectedGenderName.value}` : '',
+        selectedPrefixName.value ? `คำนำหน้า: ${selectedPrefixName.value}` : '',
+        selectedProvinceName.value ? `จังหวัด: ${selectedProvinceName.value}` : '',
+        selectedDistrictName.value ? `อำเภอ: ${selectedDistrictName.value}` : '',
+        selectedSubDistrictName.value ? `ตำบล: ${selectedSubDistrictName.value}` : '',
+        selectedZipcode.value ? `ไปรษณีย์: ${selectedZipcode.value}` : ''
+    ].filter(Boolean).join(' | ')
 
-    await navigateTo({
-        path: '/customer/confirm',
-        query: {
-            ref: referenceNo,
-            phone,
-            type: 'product',
-            item: selectedProduct.value.name
-        }
-    })
+    const customerNote = [
+        profileNote,
+        orderForm.note.trim()
+    ].filter(Boolean).join(' | ')
+
+    submitError.value = ''
+    isSubmitting.value = true
+
+    try {
+        await createAggregateBooking({
+            booking: {
+                booking_no: referenceNo,
+                delivery_phone: phone,
+                delivery_first_name: firstName,
+                delivery_last_name: lastName || undefined,
+                delivery_no: orderForm.houseNo.trim() || undefined,
+                delivery_village: orderForm.village.trim() || undefined,
+                delivery_street: orderForm.road.trim() || undefined,
+                delivery_province_id: orderForm.provinceId || undefined,
+                delivery_district_id: orderForm.districtId || undefined,
+                delivery_sub_district_id: orderForm.subDistrictId || undefined,
+                delivery_zipcode_id: orderForm.zipcodeId || undefined,
+                internal_note: customerNote || undefined,
+                delivery_note: orderForm.pickupDate ? `วันที่รับสินค้า: ${orderForm.pickupDate}` : undefined
+            },
+            detail: {
+                first_name: firstName,
+                last_name: lastName || undefined,
+                phone
+            },
+            items: [
+                {
+                    product_id: productView.value.id,
+                    product_name: productView.value.name,
+                    unit_price_at_booking: unitPrice,
+                    quantity,
+                    line_total: unitPrice * quantity,
+                    note: orderForm.note.trim() || undefined
+                }
+            ]
+        })
+
+        await navigateTo({
+            path: '/customer/confirm',
+            query: {
+                ref: referenceNo,
+                phone,
+                type: 'product',
+                item: productView.value.name
+            }
+        })
+    } catch {
+        submitError.value = 'ไม่สามารถส่งคำสั่งซื้อได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง'
+    } finally {
+        isSubmitting.value = false
+    }
 }
 </script>
 
